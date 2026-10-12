@@ -12,6 +12,7 @@ import {
   X,
 } from 'lucide-react';
 import { ActivityHistoryDTO, EngineAPI, ProcessInstanceDTO, ProjectJob } from '@/api/engine';
+import { AgentStepEvidence, EvidenceAPI } from '@/api/evidence';
 import { WorkflowFile } from '@/types';
 import { humanize, statusOf } from '@/lib/run/instanceFormat';
 import {
@@ -37,6 +38,8 @@ interface LiveInstanceInspectorProps {
   /** Docked beside the canvas (true) or floating over it (false). */
   pinned: boolean;
   onPinnedChange: (pinned: boolean) => void;
+  /** Opens a child instance an agent delegated to (its step links to it). */
+  onOpenInstance?: (instanceId: string) => void;
 }
 
 /**
@@ -56,11 +59,13 @@ export const LiveInstanceInspector: React.FC<LiveInstanceInspectorProps> = ({
   onPanelWidthChange,
   pinned,
   onPinnedChange,
+  onOpenInstance,
 }) => {
   const [tab, setTab] = useState<InspectorTab>('telemetry');
   const [history, setHistory] = useState<ActivityHistoryDTO[]>([]);
   const [jobs, setJobs] = useState<ProjectJob[]>([]);
   const [variables, setVariables] = useState<Record<string, unknown> | null>(null);
+  const [agentSteps, setAgentSteps] = useState<AgentStepEvidence[]>([]);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<string | null>(null);
 
@@ -77,6 +82,8 @@ export const LiveInstanceInspector: React.FC<LiveInstanceInspectorProps> = ({
       setHistory(hist);
       setJobs(jobList);
       setVariables(vars);
+      // Summaries only; payloads stay behind the evidence-reader role.
+      setAgentSteps(await EvidenceAPI.steps(projectId, instanceId).catch(() => []));
     } catch {
       // Keep the last snapshot; the next poll retries.
     } finally {
@@ -254,6 +261,9 @@ export const LiveInstanceInspector: React.FC<LiveInstanceInspectorProps> = ({
                 variables={variables}
                 onRetry={retryJob}
                 projectId={projectId}
+                agentSteps={agentSteps}
+                instanceId={instanceId}
+                onOpenInstance={onOpenInstance}
               />
             ) : (
               <div className="space-y-3">
