@@ -46,11 +46,14 @@ public class InsightProposalService {
     private final InsightApprovalPolicyRepository policies;
     private final InsightProposalReviewRepository reviews;
     private final ActivityHistoryService history;
+    private final com.abada.engine.core.replay.ReplayService replays;
 
     public InsightProposalService(InsightProposalRepository proposals,
             ProcessDefinitionRepository definitions, InsightProposalGenerator generator,
             AbadaEngine engine, InsightApprovalPolicyRepository policies,
-            InsightProposalReviewRepository reviews, ActivityHistoryService history) {
+            InsightProposalReviewRepository reviews, ActivityHistoryService history,
+            com.abada.engine.core.replay.ReplayService replays) {
+        this.replays = replays;
         this.proposals = proposals;
         this.definitions = definitions;
         this.generator = generator;
@@ -149,6 +152,7 @@ public class InsightProposalService {
             throw new ProcessEngineException("A rejection comment is required");
         }
         validateReviewer(proposal, actorGroups);
+        if (decision == InsightProposalReviewEntity.Decision.APPROVE) requireReplay(proposal);
 
         InsightProposalReviewEntity review = new InsightProposalReviewEntity();
         review.setProposalId(proposalId);
@@ -175,6 +179,17 @@ public class InsightProposalService {
                         "status", proposal.getStatus().name(), "targetVersion", proposal.getTargetVersion(),
                         "adoptedVersion", proposal.getAdoptedVersion() == null ? -1 : proposal.getAdoptedVersion()));
         return proposal;
+    }
+
+    /** A policy that requires a replay refuses every approval until one qualifies; a rejection is never blocked. */
+    private void requireReplay(InsightProposalEntity proposal) {
+        InsightApprovalPolicyEntity policy = policies.findById(new InsightApprovalPolicyId(proposal.getProjectId(),
+                proposal.getDefinitionKey())).orElse(null);
+        if (policy == null || !policy.isReplayRequired()) return;
+        if (replays.qualifying(proposal, policy.getReplayMinCases()).isEmpty()) {
+            throw new ReplayRequiredException("The approval policy requires a finished replay of this proposal on at "
+                    + "least " + policy.getReplayMinCases() + " cases before it can be approved");
+        }
     }
 
     private boolean approvalThresholdSatisfied(InsightProposalEntity proposal) {
@@ -239,6 +254,13 @@ public class InsightProposalService {
 
         public long getProposalId() {
             return proposalId;
+        }
+    }
+
+    /** An approval was refused because the policy requires a replay that has not been done (E15). */
+    public static class ReplayRequiredException extends InsightConflictException {
+        public ReplayRequiredException(String message) {
+            super(message);
         }
     }
 

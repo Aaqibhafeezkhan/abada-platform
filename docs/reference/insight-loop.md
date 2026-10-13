@@ -73,6 +73,55 @@ key matches the target.
 There is at most one `DRAFT`/`IN_REVIEW` proposal per deployment. Terminal
 proposals remain available for audit.
 
+## Replay before approval
+
+A reviewer can replay a proposal on the last recorded cases of the deployment
+it targets, and an approval policy can require it. A replay is **evidence, not
+a verdict**: it shows what the proposed definition would have done on the same
+inputs, never that it is better.
+
+- **Cases.** The newest finished root instances of the target deployment whose
+  start inputs were kept (`process_start_inputs`, governed by the project's
+  evidence policy: absent under `none`, masked under `redacted`, cleared after
+  retention). Finished cases without usable inputs are counted
+  (`withoutInputs`) and never reconstructed. Instances started before 1.1.0
+  have no inputs.
+- **Same interpreter.** The proposed source is parsed and walked in memory by
+  the engine's own `ProcessInstance`: conditions, decision tables, gateways,
+  loops, boundaries and agent output contracts behave as at runtime. No
+  instance, task, job, subscription or outbox row is created; only
+  `replay_runs` and `replay_cases` are written, plus audit events for the
+  replay itself (`REPLAY_PLANNED`, `REPLAY_STARTED`, `REPLAY_COMPLETED`,
+  `REPLAY_CANCELLED`).
+- **Agent steps** are answered by one model call per step, made by the engine
+  outside any transaction through the provider configured for the node's model,
+  priced from the engine's price table and checked against the node's output
+  contract. **Tools are not run** (the engine never calls a tool server); a
+  node with tools is reported as `toolsSkipped`. Fallback models, temperature
+  and token limits of the node are not applied.
+- **Reviewer steps** are answered from what the original reviewer decided. A
+  step with no recorded decision, or a recorded outcome the proposal removed,
+  stops the case as `NEEDS_HUMAN`; an engine task, timer, message or called
+  process stops it as `NEEDS_EXTERNAL`. A reviewer's comment is never kept: a
+  rework prompt that reads it sees `[reviewer comment not replayed]`.
+- **Diff.** The path of decisions (agent outcomes, routes, reviewer outcomes,
+  decision-table rules) of the original, from its history, against the
+  replayed path: first divergence, changed outcomes, steps only one path took.
+  The aggregate counts changed and unchanged cases and, for proposals that
+  target an agent with `reviewed_by`, how many originally overruled cases would
+  now take a different path.
+- **Bounds and cost.** At most `abada.replay.max-cases` (100) cases, default
+  20, `abada.replay.max-parallel` (2) at once. Planning prices the run from what
+  the selected cases cost originally; nothing is spent until it is started. A
+  budget stops the run `PARTIAL` and skips the rest.
+- **Crash safety.** A case is leased when claimed and settled once; a replica
+  that dies leaves it to be claimed again after the lease, so a model call may
+  repeat but a case is never lost or recorded twice.
+- **Policy.** `replayRequired` and `replayMinCases` on the approval policy
+  refuse every approval (`409 REPLAY_REQUIRED`) until a `COMPLETED` run exists
+  for the proposal's current source with at least that many cases replayed.
+  Editing the proposal invalidates earlier runs. A rejection is never blocked.
+
 ## API and authorization
 
 | Operation | Authority |
@@ -80,6 +129,8 @@ proposals remain available for audit.
 | Read configuration, policies, proposals | `insight:read`, Insight Reviewer, Operator, or Admin |
 | Approve/reject | `insight:review`, Insight Reviewer, or Admin |
 | Update policies | `insight:configure` or Admin |
+| Plan, start, cancel a replay | `insight:review`, Insight Reviewer, or Admin, and a project `REVIEWER`, `MAINTAINER` or `OWNER` |
+| Read replays | as proposals |
 
 Endpoints are under `/api/v1/insight`. Proposal lists are paginated. Review
 requests accept `expectedUpdatedAt`; stale requests return a typed 409.

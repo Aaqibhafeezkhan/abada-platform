@@ -17,5 +17,7 @@ public enum ApiErrorCode {
     AGENT_STEP_REJECTED,
     /** The work was retired (completed, cancelled, failed or timed out); its lease no longer acts. */
     WORK_RETIRED,
+    /** The proposal's policy requires a finished replay of its current source before it can be approved (E15). */
+    REPLAY_REQUIRED,
     INTERNAL_ERROR
 }

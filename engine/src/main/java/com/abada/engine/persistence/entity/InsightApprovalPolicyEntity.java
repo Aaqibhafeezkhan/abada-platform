@@ -36,6 +36,13 @@ public class InsightApprovalPolicyEntity {
     @Column(name = "approval_mode")
     private InsightProposalEntity.ApprovalMode approvalMode = InsightProposalEntity.ApprovalMode.PARALLEL;
 
+    /** When set, an approval is refused until a finished replay of the proposal's current source exists (E15). */
+    @Column(name = "replay_required")
+    private boolean replayRequired;
+
+    @Column(name = "replay_min_cases")
+    private int replayMinCases = 10;
+
     @Column(name = "updated_at")
     private Instant updatedAt;
 
@@ -53,6 +60,10 @@ public class InsightApprovalPolicyEntity {
     public void setRequiredGroups(String value) { requiredGroups = value; }
     public InsightProposalEntity.ApprovalMode getApprovalMode() { return approvalMode; }
     public void setApprovalMode(InsightProposalEntity.ApprovalMode value) { approvalMode = value; }
+    public boolean isReplayRequired() { return replayRequired; }
+    public void setReplayRequired(boolean value) { replayRequired = value; }
+    public int getReplayMinCases() { return replayMinCases; }
+    public void setReplayMinCases(int value) { replayMinCases = value; }
     public Instant getUpdatedAt() { return updatedAt; }
     public void setUpdatedAt(Instant value) { updatedAt = value; }
     public String getUpdatedBy() { return updatedBy; }

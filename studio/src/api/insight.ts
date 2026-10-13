@@ -52,8 +52,55 @@ export interface InsightApprovalPolicy {
   requiredApprovals: number;
   requiredGroups: string;
   approvalMode: 'PARALLEL' | 'SEQUENTIAL';
+  /** An approval is refused until a finished replay of the proposal's current source exists (E15). */
+  replayRequired?: boolean;
+  replayMinCases?: number;
   updatedAt: string;
   updatedBy: string;
+}
+
+export interface ReplayStep { activityId: string; kind: 'AGENT' | 'ROUTE' | 'HUMAN' | 'DECISION'; outcome: string }
+
+export interface ReplayCase {
+  id: number;
+  originalInstanceId: string;
+  state: 'PENDING' | 'RUNNING' | 'DONE' | 'NEEDS_HUMAN' | 'NEEDS_EXTERNAL' | 'SKIPPED' | 'FAILED';
+  reason?: string;
+  stoppedAt?: string;
+  inputsRedacted: boolean;
+  originallyOverridden?: boolean;
+  changed?: boolean;
+  lastConfidence?: number;
+  toolsSkipped: string[];
+  costUsd?: number;
+  costUnpriced: boolean;
+  originalPath?: ReplayStep[];
+  replayPath?: ReplayStep[];
+  diff?: { changed: boolean; firstDivergence?: { position: number; original?: ReplayStep; replayed?: ReplayStep } };
+}
+
+export interface ReplayAggregate {
+  cases: number; unchanged: number; changed: number; needsHuman: number; needsExternal: number; failed: number;
+  skipped: number; originallyOverridden: number; overriddenNowDiffering: number;
+}
+
+export interface ReplayRun {
+  id: string;
+  proposalId: number;
+  status: 'PLANNED' | 'RUNNING' | 'COMPLETED' | 'PARTIAL' | 'FAILED' | 'CANCELLED';
+  requestedCases: number;
+  withoutInputs: number;
+  budgetUsd?: number;
+  estimatedCostUsd?: number;
+  estimateUnpriced: boolean;
+  costUsd: number;
+  costUnpriced: boolean;
+  requestedBy: string;
+  createdAt: string;
+  startedAt?: string;
+  finishedAt?: string;
+  aggregate?: ReplayAggregate;
+  cases?: ReplayCase[];
 }
 
 export class InsightAPI {
@@ -109,6 +156,7 @@ export class InsightAPI {
       expectedVersion: policy.policyVersion, requiredApprovals: policy.requiredApprovals,
       requiredLanes: policy.requiredGroups.split(',').map((value) => value.replace(/^lane:/i, '').trim()),
       approvalMode: policy.approvalMode,
+      replayRequired: policy.replayRequired, replayMinCases: policy.replayMinCases,
     } : {
       expectedVersion: policy.policyVersion, requiredApprovals: policy.requiredApprovals,
       requiredGroups: policy.requiredGroups, approvalMode: policy.approvalMode,
@@ -132,6 +180,36 @@ export class InsightAPI {
       throw new Error(`Insight review failed: ${res.statusText} - ${body}`);
     }
     return res.json();
+  }
+
+  private static async replayCall<T>(projectId: string, proposalId: number, path: string, init?: RequestInit): Promise<T> {
+    const res = await authenticatedFetch(
+      `${this.BASE_URL}/projects/${projectId}/insight/proposals/${proposalId}/replays${path}`,
+      { headers: this.getHeaders(), ...init });
+    if (!res.ok) throw new Error(`Replay failed: ${res.statusText} - ${await res.text()}`);
+    return res.json();
+  }
+
+  /** Replays of a proposal, newest first (without their cases). */
+  static listReplays(projectId: string, proposalId: number): Promise<ReplayRun[]> {
+    return this.replayCall(projectId, proposalId, '');
+  }
+
+  /** Selects the cases and prices the run from what they cost; nothing is spent until it is started. */
+  static planReplay(projectId: string, proposalId: number, cases?: number, budgetUsd?: number): Promise<ReplayRun> {
+    return this.replayCall(projectId, proposalId, '', { method: 'POST', body: JSON.stringify({ cases, budgetUsd }) });
+  }
+
+  static getReplay(projectId: string, proposalId: number, runId: string): Promise<ReplayRun> {
+    return this.replayCall(projectId, proposalId, `/${runId}`);
+  }
+
+  static startReplay(projectId: string, proposalId: number, runId: string): Promise<ReplayRun> {
+    return this.replayCall(projectId, proposalId, `/${runId}/start`, { method: 'POST' });
+  }
+
+  static cancelReplay(projectId: string, proposalId: number, runId: string): Promise<ReplayRun> {
+    return this.replayCall(projectId, proposalId, `/${runId}/cancel`, { method: 'POST' });
   }
 
   static toDiffSnapshot(detail: InsightProposalDetail): WorkflowDiffSnapshot {

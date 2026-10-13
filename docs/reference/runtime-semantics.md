@@ -429,6 +429,17 @@ Evidence: [`AplBoundaryRuntimeTest`](../../engine/src/test/java/com/abada/engine
   [`PostgresEvidenceAndCostTest`](../../engine/src/test/java/com/abada/engine/core/agent/PostgresEvidenceAndCostTest.java),
   [`EvidenceAccessApiTest`](../../engine/src/test/java/com/abada/engine/api/EvidenceAccessApiTest.java).
 
+### Start inputs kept for replay
+
+A root instance's start variables are kept in `process_start_inputs` (V36,
+E15) under the same evidence policy as agent payloads, so a proposed change can
+be replayed on real cases. `none` keeps no payload; `redacted` masks sensitive
+variables and secret-like fields and flags the row `redacted`; `full` keeps the
+values as sent. The payload is AES-GCM encrypted and cleared by the retention
+sweep after `evidence_retention_days`, keeping the row. Child instances record
+nothing: replaying the parent starts its children again. Instances started
+before this release have no inputs and cannot be replayed.
+
 ## Call-process (child instances)
 
 - A token reaching a `call-process` node parks `WAITING`. In the same command

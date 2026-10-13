@@ -100,6 +100,13 @@ public class GlobalExceptionHandler {
                 ApiErrorCode.RESOURCE_NOT_FOUND, ex.getMessage(), request));
     }
 
+    @ExceptionHandler(com.abada.engine.insight.InsightProposalService.ReplayRequiredException.class)
+    public ResponseEntity<ErrorResponse> handleReplayRequired(
+            com.abada.engine.insight.InsightProposalService.ReplayRequiredException ex, HttpServletRequest request) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(ApiErrors.response(HttpStatus.CONFLICT,
+                ApiErrorCode.REPLAY_REQUIRED, ex.getMessage(), request));
+    }
+
     @ExceptionHandler(InsightConflictException.class)
     public ResponseEntity<ErrorResponse> handleInsightConflict(
             InsightConflictException ex, HttpServletRequest request) {

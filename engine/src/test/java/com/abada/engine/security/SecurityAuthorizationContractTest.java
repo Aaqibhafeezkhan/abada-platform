@@ -355,6 +355,18 @@ class SecurityAuthorizationContractTest {
                         .header("Authorization", "Bearer deployer")).andExpect(status().isNotFound());
         mvc.perform(get(versions).header("Authorization", "Bearer deployer")).andExpect(status().isNotFound());
 
+        // Replaying a proposal (E15) spends model budget: reviewers only, and only members of the project.
+        String replays = "/v1/projects/" + ProjectConstants.DEFAULT_PROJECT_ID + "/insight/proposals/1/replays";
+        mvc.perform(post(replays).contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(post(replays).contentType(MediaType.APPLICATION_JSON).content("{}")
+                        .header("X-Auth-Request-User", "forged").header("X-Auth-Request-Groups", "abada-admin"))
+                .andExpect(status().isUnauthorized());
+        assertForbidden(post(replays).contentType(MediaType.APPLICATION_JSON).content("{}"), "worker");
+        assertForbidden(post(replays + "/x/start"), "insight-reader");
+        mvc.perform(post(replays).contentType(MediaType.APPLICATION_JSON).content("{}")
+                        .header("Authorization", "Bearer insight-reviewer")).andExpect(status().isNotFound());
+
         String payloads = "/v1/projects/" + ProjectConstants.DEFAULT_PROJECT_ID
                 + "/instances/missing/agent-steps/missing/payloads";
         mvc.perform(get(payloads)).andExpect(status().isUnauthorized());

@@ -163,6 +163,22 @@ Reading needs any project role; rolling back needs project `OPERATOR`,
 `process:control`, the deployer or process-controller group, or an administrator).
 See [runtime semantics](runtime-semantics.md#rollback).
 
+## Replay of a proposal
+
+Under `/api/v1/projects/{projectId}/insight/proposals/{proposalId}/replays`:
+
+- `POST` with `{ "cases", "budgetUsd" }` (both optional) selects the cases and
+  returns a `PLANNED` run with an estimated cost; nothing is spent. One active
+  run per proposal; only a proposal under review can be replayed.
+- `POST .../{runId}/start` starts it; `POST .../{runId}/cancel` stops it.
+- `GET` lists the proposal's runs; `GET .../{runId}` returns the run with its
+  aggregate and cases (state, reason, first divergence, original and replayed
+  path, tools skipped, cost).
+
+Policy: `PUT .../insight/policies/{key}` accepts `replayRequired` and
+`replayMinCases`; an approval that the policy refuses returns `409` with code
+`REPLAY_REQUIRED`. See [Insight loop](insight-loop.md#replay-before-approval).
+
 ## Project event stream
 
 `GET /api/v1/projects/{projectId}/events/stream` streams the project's
