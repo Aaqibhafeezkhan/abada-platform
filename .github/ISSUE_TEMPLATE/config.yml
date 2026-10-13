@@ -1,5 +1,8 @@
 blank_issues_enabled: true
 contact_links:
+  - name: Questions and ideas
+    url: https://github.com/bashizip/abada-platform/discussions
+    about: Ask a question, share an idea or show what you built in GitHub Discussions.
   - name: Documentation
     url: https://docs.abadaplatform.com
     about: Concepts, quickstart, tutorials and reference.

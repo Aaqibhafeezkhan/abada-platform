@@ -12,6 +12,7 @@ reproducible bug report.
 
 | You have… | Good place to start |
 | --- | --- |
+| 5 minutes | Ask a question or share what you built in [Discussions](https://github.com/bashizip/abada-platform/discussions) |
 | 10 minutes | Install Abada and report anything that confused you ([bug report](https://github.com/bashizip/abada-platform/issues/new/choose)) |
 | An hour | Pick an issue labelled [`good first issue`](https://github.com/bashizip/abada-platform/labels/good%20first%20issue) or [`documentation`](https://github.com/bashizip/abada-platform/labels/documentation) |
 | A use case | Add an example process under [`examples/apl/`](examples/apl/) with a short README |
