@@ -32,7 +32,7 @@ import {
   TimeoutEditor,
 } from '@/components/inspector/RouteEditors';
 import { AgentToolsEditor } from '@/components/inspector/AgentToolsEditor';
-import { AgentLimitsEditor, CallProcessEditor, DelegatesEditor } from '@/components/inspector/AgentEditors';
+import { AgentLimitsEditor, CallProcessEditor, DelegatesEditor, ReviewedByEditor } from '@/components/inspector/AgentEditors';
 
 interface PropertiesInspectorProps {
   selectedNode: WorkflowNode | null;
@@ -653,6 +653,13 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
               limits={{ maxTurns: selectedNode.agentConfig.maxTurns, maxTokensTotal: selectedNode.agentConfig.maxTokensTotal,
                 budgetUsd: selectedNode.agentConfig.budgetUsd }}
               onChange={(patch) => onUpdateNode({ ...selectedNode, agentConfig: { ...selectedNode.agentConfig!, ...patch } })} />
+            <ReviewedByEditor
+              reviewers={nodes.filter((candidate) => candidate.type === 'human' && candidate.humanConfig?.outcomes
+                && Object.keys(candidate.humanConfig.outcomes).length > 0)
+                .map((candidate) => ({ id: candidate.id, label: candidate.title || candidate.id,
+                  outcomes: Object.keys(candidate.humanConfig!.outcomes!) }))}
+              value={selectedNode.agentConfig.reviewedBy}
+              onChange={(reviewedBy) => handleAgentChange('reviewedBy', reviewedBy)} />
             <DelegatesEditor delegates={selectedNode.agentConfig.delegates ?? []}
               onChange={(delegates) => handleAgentChange('delegates', delegates)} />
 

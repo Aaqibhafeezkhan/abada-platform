@@ -558,6 +558,12 @@ public class AbadaEngine {
         }
         historyService.record("TASK_COMPLETED", instance, activityId, details);
         recordUserTaskFact(instance, currentTask);
+        if (chosen != null) {
+            for (com.abada.engine.core.model.ReviewedByMeta review : instance.getDefinition().reviewsAt(activityId)) {
+                insightFactWriter.recordAgentReview(instance.getId(), review.agentNode(), activityId,
+                        chosen.name(), review.accept(), Instant.now());
+            }
+        }
         persistRuntimeState(instance);
 
         String completedTokenRef = currentTask.getTokenId() != null ? currentTask.getTokenId() : activityId;

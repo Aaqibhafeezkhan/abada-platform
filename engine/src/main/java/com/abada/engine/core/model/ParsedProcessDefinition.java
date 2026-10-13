@@ -32,6 +32,8 @@ public class ParsedProcessDefinition implements Serializable {
     private Map<String, EvidenceOverride> evidenceOverrides = Map.of();
     private Map<String, List<AgentRouteMeta>> agentRoutes = Map.of();
     private Map<String, List<DelegationMeta>> delegations = Map.of();
+    /** Agent node id to the human step that reviews its output (E14). */
+    private Map<String, ReviewedByMeta> reviews = Map.of();
 
     /** A node's {@code evidence: { payloads, retention_days }}; null fields leave the project's setting. */
     public record EvidenceOverride(String payloads, Integer retentionDays) implements java.io.Serializable {}
@@ -224,6 +226,25 @@ public class ParsedProcessDefinition implements Serializable {
     public BoundaryMeta getBoundary(String activityId, String boundaryId) {
         return boundariesOf(activityId).stream().filter(boundary -> boundary.id().equals(boundaryId))
                 .findFirst().orElse(null);
+    }
+
+    public ParsedProcessDefinition withReviews(Map<String, ReviewedByMeta> declared) {
+        this.reviews = Map.copyOf(declared);
+        return this;
+    }
+
+    /** The review declared by an agent node, or null. */
+    public ReviewedByMeta getReviewOf(String agentNodeId) {
+        return reviews.get(agentNodeId);
+    }
+
+    /** The agent nodes whose output the given human node reviews. */
+    public List<ReviewedByMeta> reviewsAt(String reviewNodeId) {
+        return reviews.values().stream().filter(review -> review.reviewNode().equals(reviewNodeId)).toList();
+    }
+
+    public Map<String, ReviewedByMeta> getReviews() {
+        return reviews;
     }
 
     public Map<String, LoopMeta> getLoops() {

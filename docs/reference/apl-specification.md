@@ -568,6 +568,15 @@ dated, USD per million tokens). A call with tokens but no price is
 **unpriced** (cost unknown, never 0). Instances carry `agentCost` (USD, tokens,
 `includesUnpriced`).
 
+#### 3.2.4 Agent review
+
+`reviewed_by: { node, accept }` names the `human-input` node that checks the
+agent's output and the outcome that keeps it. It is metadata for the Insight
+loop (override rate, confidence calibration) and changes no routing. The node
+must exist, declare `outcomes`, be reachable from the agent and have `accept`
+among them; otherwise deployment fails with `ABADA-APL-REVIEW-001` at
+`/flow/nodes/<i>/reviewed_by`.
+
 #### 3.2.3 Agent delegation
 
 An agent may start another process of the project as a governed child, when

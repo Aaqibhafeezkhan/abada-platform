@@ -181,6 +181,10 @@ public class InsightWorker {
             case "FAILURE_RATE" -> InsightFindingEntity.SignalType.FAILURE_RATE;
             case "LATENCY" -> InsightFindingEntity.SignalType.LATENCY_P95;
             case "FALLBACK_THRASH" -> InsightFindingEntity.SignalType.FALLBACK_THRASH;
+            case "OVERRIDE_RATE" -> InsightFindingEntity.SignalType.OVERRIDE_RATE;
+            case "CONFIDENCE_DRIFT" -> InsightFindingEntity.SignalType.CONFIDENCE_DRIFT;
+            case "CALIBRATION_GAP" -> InsightFindingEntity.SignalType.CALIBRATION_GAP;
+            case "COST_PER_CASE" -> InsightFindingEntity.SignalType.COST_PER_CASE;
             default -> InsightFindingEntity.SignalType.LATENCY_P95;
         };
     }

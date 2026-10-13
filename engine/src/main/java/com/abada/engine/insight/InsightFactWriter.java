@@ -3,6 +3,8 @@ package com.abada.engine.insight;
 import com.abada.engine.persistence.entity.InsightExecutionFactEntity;
 import com.abada.engine.persistence.entity.InsightExecutionFactEntity.NodeType;
 import com.abada.engine.persistence.entity.InsightExecutionFactEntity.Status;
+import com.abada.engine.persistence.entity.InsightAgentFactEntity;
+import com.abada.engine.persistence.repository.InsightAgentFactRepository;
 import com.abada.engine.persistence.repository.InsightExecutionFactRepository;
 import java.time.Instant;
 import java.util.List;
@@ -20,9 +22,55 @@ import org.springframework.stereotype.Component;
 public class InsightFactWriter {
 
     private final InsightExecutionFactRepository repository;
+    private final InsightAgentFactRepository agentFacts;
 
-    public InsightFactWriter(InsightExecutionFactRepository repository) {
+    public InsightFactWriter(InsightExecutionFactRepository repository, InsightAgentFactRepository agentFacts) {
         this.repository = repository;
+        this.agentFacts = agentFacts;
+    }
+
+    /**
+     * A successful agent visit (E14). {@code reviewNode} is the human step the
+     * node declares in {@code reviewed_by}, or null; its decision is attached
+     * later by {@link #recordAgentReview}.
+     */
+    public void recordAgentVisit(String projectId, String visitId, String definitionKey,
+            String definitionDeploymentId, String processInstanceId, String agentNode, String model,
+            Double confidence, java.math.BigDecimal costUsd, boolean costUnpriced, String reviewNode,
+            Instant endedAt) {
+        if (agentFacts.existsByVisitId(visitId)) {
+            return;
+        }
+        InsightAgentFactEntity fact = new InsightAgentFactEntity();
+        fact.setProjectId(projectId);
+        fact.setVisitId(visitId);
+        fact.setDefinitionKey(definitionKey);
+        fact.setDefinitionDeploymentId(definitionDeploymentId);
+        fact.setProcessInstanceId(processInstanceId);
+        fact.setAgentNode(agentNode);
+        fact.setModel(model);
+        fact.setConfidence(confidence);
+        fact.setCostUsd(costUsd);
+        fact.setCostUnpriced(costUnpriced);
+        fact.setReviewNode(reviewNode);
+        fact.setEndedAt(endedAt);
+        agentFacts.save(fact);
+    }
+
+    /**
+     * The reviewer's decision on the newest unreviewed visit of the agent in
+     * this instance. {@code accept} is the declared acceptance outcome; any
+     * other outcome is an override. A no-op when no visit is waiting.
+     */
+    public void recordAgentReview(String processInstanceId, String agentNode, String reviewNode,
+            String outcome, String accept, Instant reviewedAt) {
+        agentFacts.findFirstByProcessInstanceIdAndAgentNodeAndReviewNodeAndReviewedAtIsNullOrderByEndedAtDesc(
+                processInstanceId, agentNode, reviewNode).ifPresent(fact -> {
+            fact.setReviewOutcome(outcome);
+            fact.setOverridden(!accept.equals(outcome));
+            fact.setReviewedAt(reviewedAt);
+            agentFacts.save(fact);
+        });
     }
 
     /**

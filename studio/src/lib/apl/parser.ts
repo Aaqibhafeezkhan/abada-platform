@@ -224,6 +224,7 @@ export function aplToWorkflow(apl: APLDocument): WorkflowFile {
           maxTokensTotal: aplNode.max_tokens_total,
           budgetUsd: aplNode.budget_usd,
           delegates: aplNode.delegates,
+          reviewedBy: aplNode.reviewed_by,
         };
         break;
       case 'engine-task':
@@ -510,6 +511,7 @@ export function workflowToAPL(wf: WorkflowFile): APLDocument {
         max_tokens_total: node.agentConfig?.maxTokensTotal,
         budget_usd: node.agentConfig?.budgetUsd,
         delegates: node.agentConfig?.delegates?.length ? node.agentConfig.delegates : undefined,
+        reviewed_by: node.agentConfig?.reviewedBy,
         next: hasAgentRoutes(node) ? undefined : getNextNode(node.id, node.type),
       } as APLNode);
     } else if (node.type === 'human') {

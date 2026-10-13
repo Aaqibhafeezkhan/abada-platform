@@ -22,7 +22,11 @@ public class InsightFindingEntity {
     public enum SignalType {
         FAILURE_RATE,
         LATENCY_P95,
-        FALLBACK_THRASH
+        FALLBACK_THRASH,
+        OVERRIDE_RATE,
+        CONFIDENCE_DRIFT,
+        CALIBRATION_GAP,
+        COST_PER_CASE
     }
 
     public enum Severity {

@@ -98,6 +98,9 @@ public class InsightProposalGenerator {
                 - Output ONLY the complete YAML document (no commentary, no markdown fence).
                 - Prefer minimal structural change; embed a "#" comment above each changed node
                   explaining the change.
+                - For OVERRIDE_RATE, CALIBRATION_GAP, CONFIDENCE_DRIFT and COST_PER_CASE the node is an
+                  agent: adjust only its prompt, confidence_threshold, model or output_schema, and keep
+                  its reviewed_by and routing as they are.
                 - Never introduce BPMN constructs outside the supported abada.io/v1 subset
                   (service tasks, decisions, user tasks, exclusive parallels, events, timer
                   candidates, external tasks).

@@ -1,8 +1,10 @@
 package com.abada.engine.insight;
 
+import com.abada.engine.persistence.entity.InsightAgentFactEntity;
 import com.abada.engine.persistence.entity.InsightExecutionFactEntity;
 import com.abada.engine.persistence.entity.InsightExecutionFactEntity.NodeType;
 import com.abada.engine.persistence.entity.InsightExecutionFactEntity.Status;
+import com.abada.engine.persistence.repository.InsightAgentFactRepository;
 import com.abada.engine.persistence.repository.InsightExecutionFactRepository;
 import com.abada.engine.project.ProjectConstants;
 import java.time.Instant;
@@ -27,10 +29,13 @@ public class InsightAnalyzer {
     private static final Logger log = LoggerFactory.getLogger(InsightAnalyzer.class);
 
     private final InsightExecutionFactRepository facts;
+    private final InsightAgentFactRepository agentFacts;
     private final InsightProperties properties;
 
-    public InsightAnalyzer(InsightExecutionFactRepository facts, InsightProperties properties) {
+    public InsightAnalyzer(InsightExecutionFactRepository facts, InsightAgentFactRepository agentFacts,
+            InsightProperties properties) {
         this.facts = facts;
+        this.agentFacts = agentFacts;
         this.properties = properties;
     }
 
@@ -154,7 +159,109 @@ public class InsightAnalyzer {
                 }
             }
         }
+        // factsProcessed keeps counting execution facts only; agent visits feed their own signals.
+        analyzeAgents(windowStart, windowEnd, findings);
         return new Analysis(windowFacts.size(), findings);
+    }
+
+    public static final String AGENT = "AGENT";
+
+    /**
+     * Override rate, calibration gap, confidence drift and cost per case for
+     * agent nodes (E14). Baselines use facts strictly before the window, like
+     * latency. Every signal needs {@code min-review-samples} samples.
+     */
+    long analyzeAgents(Instant windowStart, Instant windowEnd, List<Finding> findings) {
+        int min = properties.getMinReviewSamples();
+        List<InsightAgentFactEntity> visits = agentFacts
+                .findByEndedAtGreaterThanEqualAndEndedAtLessThan(windowStart, windowEnd);
+
+        Map<NodeKey, List<InsightAgentFactEntity>> reviewed = new HashMap<>();
+        for (InsightAgentFactEntity fact : agentFacts
+                .findByReviewedAtGreaterThanEqualAndReviewedAtLessThan(windowStart, windowEnd)) {
+            reviewed.computeIfAbsent(agentKey(fact), k -> new ArrayList<>()).add(fact);
+        }
+        double overrideThreshold = properties.getOverrideRateThreshold();
+        for (Map.Entry<NodeKey, List<InsightAgentFactEntity>> entry : reviewed.entrySet()) {
+            List<InsightAgentFactEntity> reviews = entry.getValue();
+            if (reviews.size() >= min) {
+                double rate = overrideRate(reviews);
+                if (rate >= overrideThreshold) {
+                    findings.add(new Finding(entry.getKey(), "Reviewers override the agent's output",
+                            "OVERRIDE_RATE", rate, overrideThreshold, reviews.size(),
+                            severity(rate, overrideThreshold)));
+                }
+            }
+            List<InsightAgentFactEntity> confident = reviews.stream()
+                    .filter(f -> f.getConfidence() != null && f.getConfidence() >= properties.getHighConfidence())
+                    .toList();
+            if (confident.size() >= min) {
+                double rate = overrideRate(confident);
+                if (rate >= overrideThreshold) {
+                    findings.add(new Finding(entry.getKey(),
+                            "Reviewers override the agent even when it is confident",
+                            "CALIBRATION_GAP", rate, overrideThreshold, confident.size(),
+                            severity(rate, overrideThreshold)));
+                }
+            }
+        }
+
+        Map<NodeKey, List<InsightAgentFactEntity>> byNode = new HashMap<>();
+        for (InsightAgentFactEntity fact : visits) {
+            byNode.computeIfAbsent(agentKey(fact), k -> new ArrayList<>()).add(fact);
+        }
+        for (Map.Entry<NodeKey, List<InsightAgentFactEntity>> entry : byNode.entrySet()) {
+            NodeKey key = entry.getKey();
+            List<InsightAgentFactEntity> prior = null;
+            List<Double> confidences = entry.getValue().stream().map(InsightAgentFactEntity::getConfidence)
+                    .filter(java.util.Objects::nonNull).toList();
+            List<Double> costs = pricedCosts(entry.getValue());
+            if (confidences.size() < min && costs.size() < min) continue;
+            prior = agentFacts.findByProjectIdAndDefinitionKeyAndDefinitionDeploymentIdAndAgentNodeAndEndedAtBefore(
+                    key.projectId(), key.definitionKey(), key.deploymentId(), key.nodeId(), windowStart);
+            List<Double> priorConfidences = prior.stream().map(InsightAgentFactEntity::getConfidence)
+                    .filter(java.util.Objects::nonNull).toList();
+            if (confidences.size() >= min && priorConfidences.size() >= min) {
+                double delta = mean(confidences) - mean(priorConfidences);
+                double points = properties.getConfidenceDriftPoints();
+                if (Math.abs(delta) >= points) {
+                    findings.add(new Finding(key, delta < 0 ? "Agent confidence is falling"
+                            : "Agent confidence is rising", "CONFIDENCE_DRIFT", Math.abs(delta), points,
+                            confidences.size(), severity(Math.abs(delta), points)));
+                }
+            }
+            List<Double> priorCosts = pricedCosts(prior);
+            if (costs.size() >= min && priorCosts.size() >= min) {
+                double baseline = mean(priorCosts);
+                double current = mean(costs);
+                double limit = baseline * properties.getCostFactor();
+                if (baseline > 0 && current >= limit) {
+                    findings.add(new Finding(key, "Agent cost per case is above its baseline",
+                            "COST_PER_CASE", current, limit, costs.size(),
+                            severity(current / baseline, properties.getCostFactor())));
+                }
+            }
+        }
+        return visits.size();
+    }
+
+    private static NodeKey agentKey(InsightAgentFactEntity fact) {
+        return new NodeKey(fact.getProjectId(), fact.getDefinitionKey(), fact.getDefinitionDeploymentId(),
+                fact.getAgentNode(), AGENT);
+    }
+
+    private static double overrideRate(List<InsightAgentFactEntity> reviews) {
+        return (double) reviews.stream().filter(f -> Boolean.TRUE.equals(f.getOverridden())).count()
+                / reviews.size();
+    }
+
+    private static List<Double> pricedCosts(List<InsightAgentFactEntity> visits) {
+        return visits.stream().filter(f -> f.getCostUsd() != null && !f.isCostUnpriced())
+                .map(f -> f.getCostUsd().doubleValue()).toList();
+    }
+
+    private static double mean(List<Double> values) {
+        return values.stream().mapToDouble(Double::doubleValue).average().orElse(0);
     }
 
     private double severity(double observed, double threshold) {

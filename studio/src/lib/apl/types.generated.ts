@@ -254,6 +254,13 @@ export interface APLAgentNode {
       })
   )[];
   routes?: Routes;
+  /**
+   * The human-input node that reviews this agent's output and the outcome that means the answer was kept. Any other outcome counts as an override in Insight. Metadata only: it does not change routing.
+   */
+  reviewed_by?: {
+    node: NodeId;
+    accept: string;
+  };
   delegates?: Delegates;
   confidence_threshold?: number;
   temperature?: number;

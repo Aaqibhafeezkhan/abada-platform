@@ -65,6 +65,8 @@ export interface AgentConfig {
   budgetUsd?: number;
   /** Processes the agent may start as governed children (`delegates`). */
   delegates?: AgentDelegate[];
+  /** The review step that checks this agent's output and the outcome that keeps it (`reviewed_by`, E14). */
+  reviewedBy?: { node: string; accept: string };
   /** Next steps the agent chooses from (`routes`); a node with routes has no `next`. */
   routes?: Record<string, AgentRoute>;
   inputs?: Record<string, string>;

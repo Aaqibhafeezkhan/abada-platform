@@ -10,6 +10,7 @@ running process instance.
 | --- | --- |
 | `insight_execution_facts` | One idempotent row per node visit (`visit_id`), with identifiers, terminal status, timing, and non-PII decision metadata. |
 | `insight_observation_windows` | Durable analyzer cursor and `ANALYZED` / `COMPLETED` / `FAILED` recovery state. |
+| `insight_agent_facts` | One row per successful agent visit: model, the confidence the engine recorded, priced cost and, when the node declares `reviewed_by`, the reviewer's outcome and whether it overrode the agent. Identifiers, numbers and outcome names only. |
 | `insight_findings` | Threshold violations for one deployment and node. |
 | `insight_proposals` | Full target/proposed APL, checksum, policy snapshot, lifecycle, and adopted version. |
 | `insight_approval_policies` | Versioned policy per definition key. |
@@ -31,6 +32,29 @@ activity ID.
 - external-task failure rate after `min-attempts`;
 - external-task p95 latency relative to the pre-window p95 baseline;
 - decision-table fallback ratio after `min-fallback-samples`.
+
+### Agent signals
+
+An agent node may declare `reviewed_by: { node, accept }` (see the
+[node reference](apl-node-reference.md)). The reviewer's decision is recorded
+in the transaction that completes the review, so a refused decision records
+nothing and every pass of a rework loop pairs with its own review. An outcome
+other than `accept` is an override. Per agent node and deployment, each signal
+needs `abada.insight.min-review-samples` (default 20) samples:
+
+- `OVERRIDE_RATE`: overrides / reviews in the window at or above
+  `override-rate-threshold` (default 0.25). Reviews fall in the window of the
+  decision, not of the agent's visit.
+- `CALIBRATION_GAP`: the same rate among outputs whose confidence is at least
+  `high-confidence` (default 85), meaning confidence no longer predicts
+  correctness.
+- `CONFIDENCE_DRIFT`: the window's mean confidence differs from the mean of
+  earlier facts by `confidence-drift-points` (default 10) or more.
+- `COST_PER_CASE`: mean priced cost per visit is at least `cost-factor`
+  (default 1.5) times the earlier mean. Unpriced visits are left out.
+
+Baselines use facts strictly before the window. There is no per-reviewer
+statistic: signals describe the agent, never the person.
 
 The rule-based fallback proposal preserves executable semantics and annotates
 the source. A configured OpenAI-compatible generator may draft a real change,

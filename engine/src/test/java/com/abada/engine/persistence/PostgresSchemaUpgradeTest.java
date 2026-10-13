@@ -38,7 +38,7 @@ class PostgresSchemaUpgradeTest {
                 .load();
         assertThat(latest.migrate().success).isTrue();
         assertThat(latest.validateWithResult().validationSuccessful).isTrue();
-        assertThat(latest.info().current().getVersion().getVersion()).isEqualTo("33");
+        assertThat(latest.info().current().getVersion().getVersion()).isEqualTo("34");
 
         try (var connection = DriverManager.getConnection(
                 POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
@@ -251,6 +251,16 @@ class PostgresSchemaUpgradeTest {
             }
             try (var indexes = metadata.getIndexInfo(null, schema, "jobs", false, false)) {
                 assertThat(indexNames(indexes)).contains("idx_jobs_instance_token_kind");
+            }
+            // V34: agent visit facts for the Insight signals.
+            for (String column : new String[] {"visit_id", "agent_node", "confidence", "cost_usd", "cost_unpriced",
+                    "review_node", "review_outcome", "overridden", "reviewed_at"}) {
+                try (var columns = metadata.getColumns(null, schema, "insight_agent_facts", column)) {
+                    assertThat(columns.next()).as("insight_agent_facts." + column).isTrue();
+                }
+            }
+            try (var indexes = metadata.getIndexInfo(null, schema, "insight_agent_facts", true, false)) {
+                assertThat(indexNames(indexes)).contains("uq_insight_agent_facts_visit");
             }
             // V33: the outbox stream's order and project.
             for (String column : new String[] {"seq", "project_id"}) {

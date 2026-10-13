@@ -46,6 +46,22 @@ public class InsightProperties {
     @Value("${abada.insight.latency-factor:2.0}")
     private double latencyFactor;
 
+    @Value("${abada.insight.min-review-samples:20}")
+    private int minReviewSamples;
+
+    @Value("${abada.insight.override-rate-threshold:0.25}")
+    private double overrideRateThreshold;
+
+    /** Confidence (0-100) from which an output counts as high confidence for the calibration signal. */
+    @Value("${abada.insight.high-confidence:85}")
+    private double highConfidence;
+
+    @Value("${abada.insight.confidence-drift-points:10}")
+    private double confidenceDriftPoints;
+
+    @Value("${abada.insight.cost-factor:1.5}")
+    private double costFactor;
+
     @Value("${abada.insight.llm.base-url:${ABADA_LLM_BASE_URL:}}")
     private String llmBaseUrl;
 
@@ -96,6 +112,26 @@ public class InsightProperties {
 
     public int getMinAttempts() {
         return minAttempts;
+    }
+
+    public int getMinReviewSamples() {
+        return minReviewSamples;
+    }
+
+    public double getOverrideRateThreshold() {
+        return overrideRateThreshold;
+    }
+
+    public double getHighConfidence() {
+        return highConfidence;
+    }
+
+    public double getConfidenceDriftPoints() {
+        return confidenceDriftPoints;
+    }
+
+    public double getCostFactor() {
+        return costFactor;
     }
 
     public int getMinFallbackSamples() {

@@ -391,6 +391,24 @@
         "routes": {
           "$ref": "#/$defs/routes"
         },
+        "reviewed_by": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "node",
+            "accept"
+          ],
+          "description": "The human-input node that reviews this agent's output and the outcome that means the answer was kept. Any other outcome counts as an override in Insight. Metadata only: it does not change routing.",
+          "properties": {
+            "node": {
+              "$ref": "#/$defs/nodeId"
+            },
+            "accept": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
         "delegates": {
           "$ref": "#/$defs/delegates"
         },

@@ -110,7 +110,7 @@ Change them here before implementation starts, not in a PR.
     are deferred. Each item is an E20 child, which gives lineage, depth limits,
     cancel cascade and crash safety for free.
 
-## E14 — Override, confidence-drift and cost signals ✱ never cut
+## E14 — Override, confidence-drift and cost signals ✱ never cut ✅ done
 
 **Goal.** The Insight loop notices that people keep overriding an agent, that
 its confidence is moving, or that it has become expensive, and says which node
@@ -189,6 +189,27 @@ singleton is unchanged.
 
 **Out of scope.** Per-reviewer statistics (it would profile people; revisit
 with a privacy review); alerting and notifications; automatic threshold tuning.
+
+**As built (E14) ✅ done.** One table, `insight_agent_facts` (V34), holds the
+agent visit and, once decided, its review (`review_node` is set at the visit
+from the declaration, `reviewed_at`/`overridden` when the human node is
+decided), rather than a separate review table. The pairing is the newest
+unreviewed visit of that agent in the same instance, which pairs every pass of a
+rework loop with its own review. Review signals are analysed in the window of
+the decision (`reviewed_at`), visit signals in the window of the visit.
+`ParsedProcessDefinition.getReviewOf/reviewsAt` carry the declaration; the
+descriptor sent to workers is unchanged. Tests: `AplReviewedByParserTest`,
+`InsightAnalyzerAgentSignalsTest`, `PostgresInsightReviewFactTest` (rework loop
+pairs, a refused decision records nothing), schema and token upgrade tests
+(→ V34), Studio `parser.test.ts` and `AgentEditors.test.tsx`.
+
+**Deviations (E14).**
+- `CALIBRATION_GAP` uses a global `abada.insight.high-confidence` (default 85)
+  rather than each node's `confidence_threshold`: the analyzer reads facts, not
+  definitions.
+- Studio edits `reviewed_by` in the agent inspector; the Insight panel lists
+  the new signals through the existing findings view, with no new screen.
+- The `OpenApiContractTest` is unaffected (no endpoint changed).
 
 ## E15 — Replay before approval ✱ never cut
 

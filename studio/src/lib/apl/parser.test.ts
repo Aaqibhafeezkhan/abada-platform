@@ -509,6 +509,28 @@ describe('APL round trip: agent delegates', () => {
   });
 });
 
+describe('APL round trip: agent reviewed_by', () => {
+  it('keeps the review step an agent is checked by through a save', () => {
+    const document: APLDocument = {
+      version: 'abada.io/v1',
+      metadata: { key: 'desk', name: 'Desk' },
+      flow: {
+        entry: 'start',
+        nodes: [
+          { id: 'start', type: 'webhook', next: 'draft' },
+          { id: 'draft', type: 'agent', model: 'gemini-3.6-flash', prompt: 'Draft',
+            reviewed_by: { node: 'review', accept: 'approve' }, next: 'review' },
+          { id: 'review', type: 'human-input', assignees: ['reviewers'],
+            outcomes: { approve: { next: 'done' }, reject: { next: 'draft', comment: 'required' } } },
+          { id: 'done', type: 'end' },
+        ],
+      },
+    };
+    const saved = workflowToAPL(aplToWorkflow(document)).flow.nodes.find((node) => node.id === 'draft');
+    expect(saved).toMatchObject({ reviewed_by: { node: 'review', accept: 'approve' }, next: 'review' });
+  });
+});
+
 describe('APL round trip: agent limits and clearing edited fields', () => {
   const document = (): APLDocument => ({
     version: 'abada.io/v1',

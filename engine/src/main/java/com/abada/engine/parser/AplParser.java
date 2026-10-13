@@ -14,6 +14,7 @@ import com.abada.engine.core.model.BoundaryMeta;
 import com.abada.engine.core.model.DelegationMeta;
 import com.abada.engine.core.model.DecisionTableMeta;
 import com.abada.engine.core.model.LoopMeta;
+import com.abada.engine.core.model.ReviewedByMeta;
 import com.abada.engine.core.model.AgentWorkDescriptor;
 import com.abada.engine.core.model.GatewayMeta;
 import com.abada.engine.core.model.EventMeta;
@@ -672,6 +673,10 @@ public final class AplParser {
         if (errors.isEmpty()) {
             addBoundaries(nodesById, pointerById, flows, flowIds, boundaries, agentRoutes, errors);
         }
+        Map<String, ReviewedByMeta> reviews = new LinkedHashMap<>();
+        if (errors.isEmpty()) {
+            parseReviews(nodesById, pointerById, flows, userTasks, reviews, errors);
+        }
         if (!errors.isEmpty()) throw new BpmnValidationException(errors);
 
         String definitionId = processId;
@@ -680,7 +685,7 @@ public final class AplParser {
                 flows, gateways, events, endEvents,
                 rawSource, null, null).withLoops(loops).withBoundaries(boundaries).withCallProcesses(callProcesses)
                 .withEvidenceOverrides(evidenceOverrides).withAgentRoutes(agentRoutes)
-                .withDelegations(delegations)
+                .withDelegations(delegations).withReviews(reviews)
                 .withSensitiveVariables(AplVariables.sensitiveNames(root));
         if (enforceDeploymentPolicy) {
             // Every cycle must be bounded. Checked on deployment only, like the
@@ -1332,6 +1337,70 @@ public final class AplParser {
                 errors.addAll(locate(exception, entry.getKey(), pointerById.get(entry.getKey())));
             }
         }
+    }
+
+    /** Error code of a malformed {@code reviewed_by} (E14). */
+    public static final String REVIEW_CODE = "ABADA-APL-REVIEW-001";
+
+    /**
+     * {@code reviewed_by: { node, accept }} on an agent: the node must be a
+     * human step with outcomes, reachable from the agent, and {@code accept}
+     * one of its outcomes. Metadata only; routing is untouched.
+     */
+    private static void parseReviews(Map<String, JsonNode> nodesById, Map<String, String> pointerById,
+            List<SequenceFlow> flows, Map<String, TaskMeta> userTasks, Map<String, ReviewedByMeta> reviews,
+            List<BpmnValidationIssue> errors) {
+        for (Map.Entry<String, JsonNode> entry : nodesById.entrySet()) {
+            String agentId = entry.getKey();
+            JsonNode node = entry.getValue();
+            if (!node.has("reviewed_by")) continue;
+            String base = pointerById.get(agentId) + "/reviewed_by";
+            if (!"agent".equals(node.path("type").asText())) {
+                errors.add(reviewIssue(base, agentId, "node '" + agentId
+                        + "' declares 'reviewed_by', which only agent nodes support"));
+                continue;
+            }
+            JsonNode declared = node.path("reviewed_by");
+            String reviewId = declared.path("node").asText("");
+            String accept = declared.path("accept").asText("");
+            TaskMeta review = userTasks.get(reviewId);
+            if (review == null) {
+                errors.add(reviewIssue(base + "/node", agentId, "agent '" + agentId + "' is reviewed_by '"
+                        + reviewId + "', which is not a human-input node"));
+            } else if (review.getOutcomes().isEmpty()) {
+                errors.add(reviewIssue(base + "/node", agentId, "review node '" + reviewId
+                        + "' declares no outcomes, so an override cannot be told from an acceptance"));
+            } else if (review.getOutcome(accept) == null) {
+                errors.add(reviewIssue(base + "/accept", agentId, "'" + accept + "' is not an outcome of review node '"
+                        + reviewId + "'; expected one of "
+                        + review.getOutcomes().stream().map(com.abada.engine.core.model.OutcomeMeta::name).toList()));
+            } else if (!reaches(flows, agentId, reviewId)) {
+                errors.add(reviewIssue(base + "/node", agentId, "review node '" + reviewId
+                        + "' is not reachable from agent '" + agentId + "'"));
+            } else {
+                reviews.put(agentId, new ReviewedByMeta(agentId, reviewId, accept));
+            }
+        }
+    }
+
+    private static BpmnValidationIssue reviewIssue(String path, String elementId, String message) {
+        return new BpmnValidationIssue(REVIEW_CODE, ValidationSeverity.ERROR, message,
+                null, elementId, LANGUAGE_VERSION, null, null, path);
+    }
+
+    private static boolean reaches(List<SequenceFlow> flows, String from, String to) {
+        Set<String> seen = new java.util.HashSet<>();
+        java.util.ArrayDeque<String> queue = new java.util.ArrayDeque<>(List.of(from));
+        while (!queue.isEmpty()) {
+            String current = queue.poll();
+            if (!seen.add(current)) continue;
+            for (SequenceFlow flow : flows) {
+                if (!flow.getSourceRef().equals(current)) continue;
+                if (flow.getTargetRef().equals(to)) return true;
+                queue.add(flow.getTargetRef());
+            }
+        }
+        return false;
     }
 
     private static final Set<String> BOUNDARY_TYPES = Set.of("agent", "engine-task", "human-input", "approval-gate",
