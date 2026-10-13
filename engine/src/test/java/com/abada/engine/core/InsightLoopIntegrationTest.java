@@ -229,18 +229,9 @@ class InsightLoopIntegrationTest {
 
     @Test
     void llmSuggestionIsValidatedBeforeItBecomesAProposal() throws Exception {
-        String rewrite = "# changed: LLM rewrite\n"
-                + "version: abada.io/v1\n"
-                + "metadata:\n  name: Candidate Review\n"
-                + "flow:\n  entry: apply\n  nodes:\n"
-                + "    - id: apply\n      type: webhook\n      next: score\n"
-                + "    - id: score\n      type: decision-table\n      decisionKey: CANDIDATE_SCORING\n"
-                + "      hitPolicy: FIRST\n      inputs:\n        - name: score\n      rules:\n"
-                + "        - when: score >= 75\n          then:\n            rating: pass\n"
-                + "        - otherwise: true\n          then:\n            rating: fail\n      next: gate\n"
-                + "    - id: gate\n      type: human-input\n      assignees: [recruiters]\n      next: notify\n"
-                + "    - id: notify\n      type: agent\n      next: end\n"
-                + "    - id: end\n      type: end\n";
+        // A refinement is a patch: the model names the operations, the engine applies and validates them.
+        String rewrite = "{\"summary\":\"Documents the fallback rule\",\"operations\":["
+                + "{\"op\":\"updateNode\",\"id\":\"score\",\"set\":{\"description\":\"changed by the LLM\"}}]}";
         FakeLlm server = new FakeLlm(List.of(rewrite));
         server.start();
         try (ConfigurableApplicationContext context = startApp(
@@ -259,7 +250,9 @@ class InsightLoopIntegrationTest {
 
             var proposals = context.getBean(InsightProposalRepository.class).findAll();
             assertThat(proposals).singleElement();
-            assertThat(proposals.getFirst().getProposedSource()).startsWith("# changed: LLM rewrite");
+            assertThat(proposals.getFirst().getProposedSource()).contains("changed by the LLM")
+                    .contains("version: abada.io/v1").doesNotContain("# Insight engine working draft");
+            assertThat(proposals.getFirst().getRationale()).contains("Documents the fallback rule");
         } finally {
             server.stop();
         }

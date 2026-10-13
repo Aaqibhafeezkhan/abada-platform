@@ -3,10 +3,13 @@ import { AuthoringAPI, AplGenerationCandidate } from '@/api/authoring';
 import { Project } from '@/api/projects';
 import { WorkflowFile, SimulationLog } from '@/types';
 import { aplToWorkflow, parseAPLYaml, stringifyAPLYaml, workflowToAPL } from '@/lib/apl/parser';
+import { nodeChanges, type NodeChange } from '@/lib/apl/nodeChanges';
 
 export interface AuthoringCandidate extends AplGenerationCandidate {
   workflow: WorkflowFile;
   replaceWorkflowId?: string;
+  /** For a refinement: the nodes it added, changed or removed. */
+  changes?: NodeChange[];
 }
 
 export function useAplAuthoringState(
@@ -52,7 +55,8 @@ export function useAplAuthoringState(
         version: currentWorkflow.version, updatedAt: currentWorkflow.updatedAt,
       } : { ...parsed, id: `draft-generated-${Date.now()}` };
       setAuthoringCandidate({ ...candidate, workflow: candidateWorkflow,
-        replaceWorkflowId: replaceCurrent ? currentWorkflow.id : undefined });
+        replaceWorkflowId: replaceCurrent ? currentWorkflow.id : undefined,
+        changes: mode === 'refine' ? nodeChanges(currentWorkflow, candidateWorkflow) : undefined });
       setDesignerMode('apl');
 
       setSimulationLogs(prev => [

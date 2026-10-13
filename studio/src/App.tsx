@@ -724,6 +724,8 @@ export default function App() {
                   model: authoringCandidate.model,
                   attempts: authoringCandidate.attempts,
                   warnings: authoringCandidate.warnings,
+                  summary: authoringCandidate.summary,
+                  changes: authoringCandidate.changes,
                 } : undefined}
                 onApply={handleApplyApl}
                 onDiscard={authoringCandidate ? () => {

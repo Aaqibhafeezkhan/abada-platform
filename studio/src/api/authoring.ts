@@ -7,6 +7,9 @@ export interface AplGenerationCandidate {
   model?: string;
   attempts: number;
   warnings: string[];
+  /** For a refinement: the model's one-sentence account of the change, and the operations the engine applied. */
+  summary?: string;
+  patch?: Array<Record<string, unknown>>;
 }
 
 export class AuthoringAPI {
