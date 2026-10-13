@@ -482,3 +482,23 @@ version. Existing instances remain pinned to their deployment ID; new starts
 resolve the latest committed version. Only parsed immutable definitions are
 cached. Cache insertion occurs after deployment commit, and cache loss changes
 performance rather than execution semantics.
+
+### Rollback
+
+A rollback (`POST /api/v1/projects/{projectId}/processes/{key}/versions/{version}/rollback`,
+E16) deploys the stored source of an earlier version as the next version, with
+`rollback_of` pointing at it. It is a deployment: the source is parsed again,
+tool references and called processes are re-resolved against the project now
+(a tool or child that no longer resolves refuses the rollback with the same
+typed errors as a deployment, and nothing is written), and the new version is
+immutable. History is never edited or deleted. Instances that started on the
+replaced version finish there; new starts use the new version. Rollbacks of one
+project run one after the other under a row lock on the project; a stale
+`expectedLatest` returns `409`, and so does a version that is already current
+or whose source and dependencies equal the current version. A required comment
+is stored with the version and recorded in the audit history
+(`DEFINITION_ROLLED_BACK`: actor, versions, running instances left on the
+replaced version; never the comment text). Open Insight proposals targeting the
+replaced version are superseded when they are next reviewed, as for any
+redeployment.
+

@@ -44,6 +44,9 @@ public interface ProcessInstanceRepository extends JpaRepository<ProcessInstance
     /** Direct children of an instance (V29 lineage), oldest first. */
     List<ProcessInstanceEntity> findByParentInstanceIdOrderByStartDateAsc(String parentInstanceId);
 
+    /** Instances still running on a definition version (running or suspended). */
+    long countByProcessDefinitionDeploymentIdAndStatusIn(String deploymentId, Collection<ProcessStatus> statuses);
+
     interface ActiveProcessCount {
         String getProcessDefinitionId();
         long getInstanceCount();

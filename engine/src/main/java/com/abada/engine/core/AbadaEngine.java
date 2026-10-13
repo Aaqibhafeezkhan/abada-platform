@@ -2204,6 +2204,7 @@ public class AbadaEngine {
         entity.setCompilerVersion(schema == DefinitionSchema.APL_NATIVE ? "apl-1" : "1");
         entity.setToolBindings(toolBindings);
         entity.setCallTargets(pinnedCalls);
+        entity.setDeployedBy(IdentityContext.get().map(Identity::username).orElse(null));
         try {
             entity.setCompatibilityReport(om.writeValueAsString(parseResult.report()));
         } catch (JsonProcessingException exception) {

@@ -21,4 +21,7 @@ public interface ProcessDefinitionRepository extends JpaRepository<ProcessDefini
     Page<ProcessDefinitionEntity> findByProjectIdAndProcessKey(
             String projectId, String processKey, Pageable pageable);
     Optional<ProcessDefinitionEntity> findFirstByDeploymentId(String deploymentId);
+    List<ProcessDefinitionEntity> findByProjectIdAndProcessKeyOrderByVersionDesc(String projectId, String processKey);
+    Optional<ProcessDefinitionEntity> findByProjectIdAndProcessKeyAndVersion(
+            String projectId, String processKey, int version);
 }
