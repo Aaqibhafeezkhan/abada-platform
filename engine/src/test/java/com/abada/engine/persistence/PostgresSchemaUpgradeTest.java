@@ -38,7 +38,7 @@ class PostgresSchemaUpgradeTest {
                 .load();
         assertThat(latest.migrate().success).isTrue();
         assertThat(latest.validateWithResult().validationSuccessful).isTrue();
-        assertThat(latest.info().current().getVersion().getVersion()).isEqualTo("35");
+        assertThat(latest.info().current().getVersion().getVersion()).isEqualTo("36");
 
         try (var connection = DriverManager.getConnection(
                 POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
@@ -251,6 +251,13 @@ class PostgresSchemaUpgradeTest {
             }
             try (var indexes = metadata.getIndexInfo(null, schema, "jobs", false, false)) {
                 assertThat(indexNames(indexes)).contains("idx_jobs_instance_token_kind");
+            }
+            // V36: the variables a root instance started with, kept for replay.
+            for (String column : new String[] {"instance_id", "deployment_id", "payload_mode", "inputs_enc",
+                    "redacted", "purge_after", "purged_at"}) {
+                try (var columns = metadata.getColumns(null, schema, "process_start_inputs", column)) {
+                    assertThat(columns.next()).as("process_start_inputs." + column).isTrue();
+                }
             }
             // V35: who deployed a version and the version a rollback restores.
             for (String column : new String[] {"rollback_of", "deployed_by", "deploy_comment"}) {

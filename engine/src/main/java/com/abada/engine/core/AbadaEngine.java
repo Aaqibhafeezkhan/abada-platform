@@ -79,6 +79,7 @@ public class AbadaEngine {
     private final ToolRegistryService toolRegistry;
     private final com.abada.engine.persistence.repository.AgentStepRepository agentSteps;
     private final com.abada.engine.core.delegation.CallTargetService callTargets;
+    private final com.abada.engine.core.replay.StartInputService startInputs;
     private final com.abada.engine.persistence.repository.ProcessInstanceRepository processInstanceRepository;
     /** Deepest call-process nesting the engine allows (a root instance is depth 0). */
     private final int maxCallDepth;
@@ -122,7 +123,9 @@ public class AbadaEngine {
             com.abada.engine.persistence.repository.ProcessInstanceRepository processInstanceRepository,
             @Value("${abada.call-process.max-depth:4}") int maxCallDepth,
             @Value("${abada.call-process.resume-immediately:true}") boolean resumeChildImmediately,
-            com.abada.engine.security.AesEncryption encryption) {
+            com.abada.engine.security.AesEncryption encryption,
+            com.abada.engine.core.replay.StartInputService startInputs) {
+        this.startInputs = startInputs;
         this.encryption = encryption;
         this.persistenceService = persistenceService;
         this.parser = new BpmnParser();
@@ -426,6 +429,10 @@ public class AbadaEngine {
             started.put("depth", lineage.depth());
         }
         historyService.record("PROCESS_STARTED", instance, definition.getStartEventId(), started);
+        if (lineage == null) {
+            // Root starts only: a child's inputs come from its parent, and replaying the parent replays them.
+            startInputs.record(instance, deployment.getDeploymentId(), initialVariables, Instant.now());
+        }
         recordDecisionTableAudits(instance);
         recordLoopExhaustions(instance);
 

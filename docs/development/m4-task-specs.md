@@ -226,7 +226,20 @@ evidence at instance start (additive, behind the existing redaction policy) and
 the first usable replay corpus begins after that release; say so in the release
 notes rather than faking history.
 
-**Files.** `engine/src/main/resources/db/migration/V35__replay.sql`,
+**Verify-first result (done).** Start variables of a finished instance were
+*not* recoverable: `PROCESS_STARTED` history holds only lineage and
+`process_instances.variables_json` holds the final, mutated variables. E15
+therefore starts by recording them (**E15a**, V36 `process_start_inputs`, below);
+the first replayable corpus is instances started on this release or later.
+
+**As built (E15a) ✅ done.** `StartInputService` records a root instance's start
+variables in the launch transaction under the project's evidence policy
+(`none` / `redacted` with a `redacted` flag / `full`), encrypted, cleared by
+`EvidenceRetentionSweep` after retention (the row stays). Children record
+nothing. Tests: `PostgresStartInputTest` (three modes, encryption, retention,
+children), schema and token upgrade tests (→ V36).
+
+**Files.** `engine/src/main/resources/db/migration/V37__replay.sql`,
 `ENGINE/replay/{ReplayService,ReplayCaseSelector,ReplayDiffService,ReplayProperties}.java` (new),
 `ENGINE/core/AbadaEngine.java` (replay flag handling),
 `ENGINE/persistence/entity/{ProcessDefinitionEntity,ProcessInstanceEntity}.java`,
