@@ -56,18 +56,60 @@ class AplAuthoringServiceTest {
     }
 
     @Test
-    void refineRejectsChangedKeyAndKeepsTheExistingIdentity() throws Exception {
+    void refineAppliesTheModelsOperationsAndKeepsTheIdentity() throws Exception {
         when(llm.isConfigured()).thenReturn(true);
         when(llm.model()).thenReturn("test-model");
-        when(llm.complete(anyString(), anyString()))
-                .thenReturn(apl("changed_key", "Changed"), apl("stable_key", "Stable"));
+        when(llm.complete(anyString(), anyString())).thenReturn("""
+                {"summary":"Adds a review before the end","operations":[
+                  {"op":"addNode","node":{"id":"review","type":"human-input","assignees":["reviewers"],"next":"end"},"after":"start"},
+                  {"op":"updateNode","id":"start","set":{"next":"review"}}]}""");
 
         var candidate = service.generate("project-1", AplAuthoringService.Mode.REFINE,
                 "Add a review", apl("stable_key", "Stable"));
 
         assertThat(candidate.provider()).isEqualTo(AplAuthoringService.Provider.LLM);
+        assertThat(candidate.attempts()).isEqualTo(1);
+        assertThat(candidate.summary()).isEqualTo("Adds a review before the end");
+        assertThat(candidate.patch()).hasSize(2);
+        var definition = new AplParser().parse(candidate.aplSource().getBytes());
+        assertThat(definition.getId()).isEqualTo("stable_key");
+        assertThat(definition.getUserTasks()).containsKey("review");
+    }
+
+    @Test
+    void refineFeedsTheEnginesReasonBackAndRepairsWithinTheBound() throws Exception {
+        when(llm.isConfigured()).thenReturn(true);
+        when(llm.model()).thenReturn("test-model");
+        // First a node that points nowhere, then a corrected patch.
+        when(llm.complete(anyString(), anyString())).thenReturn(
+                "{\"operations\":[{\"op\":\"updateNode\",\"id\":\"start\",\"set\":{\"next\":\"nowhere\"}}]}",
+                "{\"operations\":[{\"op\":\"updateNode\",\"id\":\"start\",\"set\":{\"description\":\"Entry\"}}]}");
+
+        var candidate = service.generate("project-1", AplAuthoringService.Mode.REFINE,
+                "Describe the entry", apl("stable_key", "Stable"));
+
         assertThat(candidate.attempts()).isEqualTo(2);
-        assertThat(new AplParser().parse(candidate.aplSource().getBytes()).getId()).isEqualTo("stable_key");
+        assertThat(candidate.warnings()).anySatisfy(warning -> assertThat(warning).contains("failed APL validation"));
+        org.mockito.Mockito.verify(llm, org.mockito.Mockito.times(2)).complete(anyString(), org.mockito.ArgumentMatchers
+                .argThat(user -> user.contains("is not a declared node") || user.contains("Describe the entry")));
+    }
+
+    @Test
+    void refineNeverFakesAChange() throws Exception {
+        // No model configured: a typed refusal, not a starter that replaces the process.
+        when(llm.isConfigured()).thenReturn(false);
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.generate("project-1",
+                        AplAuthoringService.Mode.REFINE, "Add a review", apl("stable_key", "Stable")))
+                .isInstanceOf(AplAuthoringService.AuthoringUnavailableException.class);
+
+        // A model that never returns a usable patch: refused after the bounded attempts.
+        when(llm.isConfigured()).thenReturn(true);
+        when(llm.complete(anyString(), anyString())).thenReturn("I would add a review step.");
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.generate("project-1",
+                        AplAuthoringService.Mode.REFINE, "Add a review", apl("stable_key", "Stable")))
+                .isInstanceOf(AplAuthoringService.AuthoringFailedException.class)
+                .hasMessageContaining("3 attempts");
+        org.mockito.Mockito.verify(llm, org.mockito.Mockito.times(3)).complete(anyString(), anyString());
     }
 
     private String apl(String key, String name) {

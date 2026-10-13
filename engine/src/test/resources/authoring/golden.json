@@ -1,0 +1,239 @@
+[
+ {
+  "name": "create: agent then human review",
+  "mode": "CREATE",
+  "prompt": "Review invoices with a human approver",
+  "responses": [
+   "version: abada.io/v1\nmetadata:\n  key: {{KEY}}\n  name: {{NAME}}\nflow:\n  entry: start\n  nodes:\n    - id: start\n      type: webhook\n      next: extract\n    - id: extract\n      type: agent\n      model: gemini-3.6-flash\n      prompt: Extract the invoice fields\n      result_variable: invoice\n      next: review\n    - id: review\n      type: human-input\n      assignees: [finance]\n      next: done\n    - id: done\n      type: end\n"
+  ],
+  "expectTypes": [
+   "agent",
+   "human-input"
+  ],
+  "expectIds": [
+   "extract",
+   "review"
+  ]
+ },
+ {
+  "name": "create: deterministic routing with a condition",
+  "mode": "CREATE",
+  "prompt": "Route orders by size",
+  "responses": [
+   "version: abada.io/v1\nmetadata:\n  key: {{KEY}}\n  name: {{NAME}}\nflow:\n  entry: start\n  nodes:\n    - id: start\n      type: webhook\n      next: route\n    - id: route\n      type: condition\n      rules:\n        - if: amount > 1000\n          then: manual\n        - else: true\n          then: auto\n    - id: manual\n      type: human-input\n      assignees: [sales]\n      next: done\n    - id: auto\n      type: engine-task\n      service: orders.fulfil\n      next: done\n    - id: done\n      type: end\n"
+  ],
+  "expectTypes": [
+   "condition",
+   "human-input",
+   "engine-task"
+  ],
+  "expectIds": [
+   "route",
+   "manual",
+   "auto"
+  ]
+ },
+ {
+  "name": "create: decision table before an agent",
+  "mode": "CREATE",
+  "prompt": "Score candidates then draft a reply",
+  "responses": [
+   "version: abada.io/v1\nmetadata:\n  key: {{KEY}}\n  name: {{NAME}}\nflow:\n  entry: start\n  nodes:\n    - id: start\n      type: webhook\n      next: score\n    - id: score\n      type: decision-table\n      decisionKey: CANDIDATE_SCORE\n      hitPolicy: FIRST\n      inputs:\n        - name: score\n      rules:\n        - when: score >= 75\n          then:\n            rating: pass\n        - otherwise: true\n          then:\n            rating: fail\n      next: reply\n    - id: reply\n      type: agent\n      model: gemini-3.6-flash\n      prompt: Draft a reply for a candidate rated ${rating}\n      next: done\n    - id: done\n      type: end\n"
+  ],
+  "expectTypes": [
+   "decision-table",
+   "agent"
+  ],
+  "expectIds": [
+   "score",
+   "reply"
+  ]
+ },
+ {
+  "name": "create: a wait with a timer",
+  "mode": "CREATE",
+  "prompt": "Wait a day then remind",
+  "responses": [
+   "version: abada.io/v1\nmetadata:\n  key: {{KEY}}\n  name: {{NAME}}\nflow:\n  entry: start\n  nodes:\n    - id: start\n      type: webhook\n      next: wait\n    - id: wait\n      type: timer\n      duration: P1D\n      next: remind\n    - id: remind\n      type: engine-task\n      service: notify.remind\n      next: done\n    - id: done\n      type: end\n"
+  ],
+  "expectTypes": [
+   "timer",
+   "engine-task"
+  ],
+  "expectIds": [
+   "wait",
+   "remind"
+  ]
+ },
+ {
+  "name": "create: agent with an output contract and review boundary",
+  "mode": "CREATE",
+  "prompt": "Classify leads and review the unsure ones",
+  "responses": [
+   "version: abada.io/v1\nmetadata:\n  key: {{KEY}}\n  name: {{NAME}}\nflow:\n  entry: start\n  nodes:\n    - id: start\n      type: webhook\n      next: classify\n    - id: classify\n      type: agent\n      model: gemini-3.6-flash\n      prompt: Classify the lead\n      result_variable: lead\n      output_schema:\n        type: object\n        required: [priority]\n        properties:\n          priority:\n            enum: [HIGH, LOW]\n      confidence_threshold: 80\n      on_low_confidence: review\n      next: done\n    - id: review\n      type: human-input\n      assignees: [sales]\n      next: done\n    - id: done\n      type: end\n"
+  ],
+  "expectTypes": [
+   "agent",
+   "human-input"
+  ],
+  "expectIds": [
+   "classify",
+   "review"
+  ]
+ },
+ {
+  "name": "refine: add a fraud check before approval",
+  "mode": "REFINE",
+  "prompt": "Add a fraud check agent before the approval",
+  "base": "version: abada.io/v1\nmetadata:\n  key: claims\n  name: Claims\nflow:\n  entry: start\n  nodes:\n    - id: start\n      type: webhook\n      next: triage\n    - id: triage\n      type: agent\n      model: gemini-3.6-flash\n      prompt: Assess the claim\n      result_variable: assessment\n      next: approve\n    - id: approve\n      type: human-input\n      assignees: [claims-team]\n      next: done\n    - id: done\n      type: end\n",
+  "responses": [
+   "{\"summary\": \"Adds a fraud check after triage\", \"operations\": [{\"op\": \"addNode\", \"after\": \"triage\", \"node\": {\"id\": \"fraud\", \"type\": \"agent\", \"model\": \"gemini-3.6-flash\", \"prompt\": \"Check the claim for fraud signals\", \"result_variable\": \"fraud_signal\", \"next\": \"approve\"}}, {\"op\": \"updateNode\", \"id\": \"triage\", \"set\": {\"next\": \"fraud\"}}]}"
+  ],
+  "expectTypes": [
+   "agent"
+  ],
+  "expectIds": [
+   "fraud"
+  ],
+  "absentIds": [],
+  "unchangedIds": [
+   "start",
+   "approve",
+   "done"
+  ],
+  "expectSummary": "Adds a fraud check after triage"
+ },
+ {
+  "name": "refine: change the agent prompt only",
+  "mode": "REFINE",
+  "prompt": "Make the assessment stricter",
+  "base": "version: abada.io/v1\nmetadata:\n  key: claims\n  name: Claims\nflow:\n  entry: start\n  nodes:\n    - id: start\n      type: webhook\n      next: triage\n    - id: triage\n      type: agent\n      model: gemini-3.6-flash\n      prompt: Assess the claim\n      result_variable: assessment\n      next: approve\n    - id: approve\n      type: human-input\n      assignees: [claims-team]\n      next: done\n    - id: done\n      type: end\n",
+  "responses": [
+   "{\"summary\": \"Makes the assessment prompt stricter\", \"operations\": [{\"op\": \"updateNode\", \"id\": \"triage\", \"set\": {\"prompt\": \"Assess the claim strictly and list missing evidence\"}}]}"
+  ],
+  "expectTypes": [],
+  "expectIds": [],
+  "absentIds": [],
+  "unchangedIds": [
+   "start",
+   "approve",
+   "done"
+  ],
+  "expectSummary": "Makes the assessment prompt stricter"
+ },
+ {
+  "name": "refine: require a confidence threshold with a review route",
+  "mode": "REFINE",
+  "prompt": "Send unsure assessments to a human",
+  "base": "version: abada.io/v1\nmetadata:\n  key: claims\n  name: Claims\nflow:\n  entry: start\n  nodes:\n    - id: start\n      type: webhook\n      next: triage\n    - id: triage\n      type: agent\n      model: gemini-3.6-flash\n      prompt: Assess the claim\n      result_variable: assessment\n      next: approve\n    - id: approve\n      type: human-input\n      assignees: [claims-team]\n      next: done\n    - id: done\n      type: end\n",
+  "responses": [
+   "{\"summary\": \"Routes low-confidence assessments to a manual review\", \"operations\": [{\"op\": \"addNode\", \"node\": {\"id\": \"manual\", \"type\": \"human-input\", \"assignees\": [\"claims-team\"], \"next\": \"done\"}}, {\"op\": \"updateNode\", \"id\": \"triage\", \"set\": {\"confidence_threshold\": 85, \"on_low_confidence\": \"manual\"}}]}"
+  ],
+  "expectTypes": [
+   "human-input"
+  ],
+  "expectIds": [
+   "manual"
+  ],
+  "absentIds": [],
+  "unchangedIds": [
+   "start",
+   "approve",
+   "done"
+  ],
+  "expectSummary": "Routes low-confidence assessments to a manual review"
+ },
+ {
+  "name": "refine: remove the approval step and relink",
+  "mode": "REFINE",
+  "prompt": "Drop the approval, pay automatically",
+  "base": "version: abada.io/v1\nmetadata:\n  key: claims\n  name: Claims\nflow:\n  entry: start\n  nodes:\n    - id: start\n      type: webhook\n      next: triage\n    - id: triage\n      type: agent\n      model: gemini-3.6-flash\n      prompt: Assess the claim\n      result_variable: assessment\n      next: approve\n    - id: approve\n      type: human-input\n      assignees: [claims-team]\n      next: done\n    - id: done\n      type: end\n",
+  "responses": [
+   "{\"summary\": \"Removes the manual approval\", \"operations\": [{\"op\": \"updateNode\", \"id\": \"triage\", \"set\": {\"next\": \"done\"}}, {\"op\": \"removeNode\", \"id\": \"approve\"}]}"
+  ],
+  "expectTypes": [],
+  "expectIds": [],
+  "absentIds": [
+   "approve"
+  ],
+  "unchangedIds": [
+   "start",
+   "done"
+  ],
+  "expectSummary": "Removes the manual approval"
+ },
+ {
+  "name": "refine: add a timer before the approval",
+  "mode": "REFINE",
+  "prompt": "Wait an hour before asking for approval",
+  "base": "version: abada.io/v1\nmetadata:\n  key: claims\n  name: Claims\nflow:\n  entry: start\n  nodes:\n    - id: start\n      type: webhook\n      next: triage\n    - id: triage\n      type: agent\n      model: gemini-3.6-flash\n      prompt: Assess the claim\n      result_variable: assessment\n      next: approve\n    - id: approve\n      type: human-input\n      assignees: [claims-team]\n      next: done\n    - id: done\n      type: end\n",
+  "responses": [
+   "{\"summary\": \"Adds a one hour wait\", \"operations\": [{\"op\": \"addNode\", \"after\": \"triage\", \"node\": {\"id\": \"cooldown\", \"type\": \"timer\", \"duration\": \"PT1H\", \"next\": \"approve\"}}, {\"op\": \"updateNode\", \"id\": \"triage\", \"set\": {\"next\": \"cooldown\"}}]}"
+  ],
+  "expectTypes": [
+   "timer"
+  ],
+  "expectIds": [
+   "cooldown"
+  ],
+  "absentIds": [],
+  "unchangedIds": [
+   "start",
+   "approve",
+   "done"
+  ],
+  "expectSummary": "Adds a one hour wait"
+ },
+ {
+  "name": "refine: give the agent a second model to fall back to",
+  "mode": "REFINE",
+  "prompt": "Add a fallback model to the assessment",
+  "base": "version: abada.io/v1\nmetadata:\n  key: claims\n  name: Claims\nflow:\n  entry: start\n  nodes:\n    - id: start\n      type: webhook\n      next: triage\n    - id: triage\n      type: agent\n      model: gemini-3.6-flash\n      prompt: Assess the claim\n      result_variable: assessment\n      next: approve\n    - id: approve\n      type: human-input\n      assignees: [claims-team]\n      next: done\n    - id: done\n      type: end\n",
+  "responses": [
+   "{\"summary\": \"Adds a fallback model\", \"operations\": [{\"op\": \"updateNode\", \"id\": \"triage\", \"set\": {\"fallback_models\": [\"gemini-3.7-flash\"]}}]}"
+  ],
+  "expectTypes": [],
+  "expectIds": [],
+  "absentIds": [],
+  "unchangedIds": [
+   "start",
+   "approve",
+   "done"
+  ],
+  "expectSummary": "Adds a fallback model"
+ },
+ {
+  "name": "refine: a first answer that points nowhere is repaired",
+  "mode": "REFINE",
+  "prompt": "Skip straight to the end",
+  "base": "version: abada.io/v1\nmetadata:\n  key: claims\n  name: Claims\nflow:\n  entry: start\n  nodes:\n    - id: start\n      type: webhook\n      next: triage\n    - id: triage\n      type: agent\n      model: gemini-3.6-flash\n      prompt: Assess the claim\n      result_variable: assessment\n      next: approve\n    - id: approve\n      type: human-input\n      assignees: [claims-team]\n      next: done\n    - id: done\n      type: end\n",
+  "responses": [
+   "{\"summary\": \"Skips the approval\", \"operations\": [{\"op\": \"updateNode\", \"id\": \"triage\", \"set\": {\"next\": \"missing\"}}]}",
+   "{\"summary\": \"Skips the approval\", \"operations\": [{\"op\": \"updateNode\", \"id\": \"triage\", \"set\": {\"next\": \"done\"}}]}"
+  ],
+  "expectTypes": [],
+  "expectIds": [
+   "triage"
+  ],
+  "absentIds": [],
+  "unchangedIds": [],
+  "expectSummary": "Skips the approval",
+  "attempts": 2
+ },
+ {
+  "name": "refine: an answer that is not a patch is repaired",
+  "mode": "REFINE",
+  "prompt": "Add a description to the start node",
+  "base": "version: abada.io/v1\nmetadata:\n  key: claims\n  name: Claims\nflow:\n  entry: start\n  nodes:\n    - id: start\n      type: webhook\n      next: triage\n    - id: triage\n      type: agent\n      model: gemini-3.6-flash\n      prompt: Assess the claim\n      result_variable: assessment\n      next: approve\n    - id: approve\n      type: human-input\n      assignees: [claims-team]\n      next: done\n    - id: done\n      type: end\n",
+  "responses": [
+   "Sure, I would describe the entry node.",
+   "{\"summary\": \"Describes the entry\", \"operations\": [{\"op\": \"updateNode\", \"id\": \"start\", \"set\": {\"description\": \"Receives the claim\"}}]}"
+  ],
+  "expectTypes": [],
+  "expectIds": [],
+  "absentIds": [],
+  "unchangedIds": [],
+  "expectSummary": "Describes the entry",
+  "attempts": 2
+ }
+]

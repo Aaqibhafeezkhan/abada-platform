@@ -138,10 +138,25 @@ administration does not bypass this product-authoring boundary.
 
 The response contains a review-only `aplSource`, `provider` (`LLM` or
 `LOCAL_FALLBACK`), optional `model`, `attempts`, and non-sensitive `warnings`.
-The Engine validates every result with `AplParser`, retries an invalid model
-candidate at most twice, and returns a deterministic valid starter if the
-OpenAI-compatible provider is absent or unavailable. This endpoint never
-persists or deploys its candidate; Studio requires an explicit Apply action.
+
+The model is told about APL from the language's own JSON Schema, so the node
+types and fields it knows are exactly the ones the engine accepts.
+
+- **`CREATE`** asks for a whole document. The Engine validates it with
+  `AplParser`, retries an invalid candidate at most twice, feeding back each
+  problem's path and message, and returns a deterministic valid starter if the
+  provider is absent or unavailable.
+- **`REFINE`** works as a **patch**: the model answers with a short list of
+  operations (`addNode`, `removeNode`, `updateNode`, `setEntry`) and a one-
+  sentence `summary`; the Engine applies them, validates the result and repairs
+  at most twice. Nodes the operations do not name are left exactly as they were,
+  and a node cannot be renamed by a patch. The response adds `summary` and
+  `patch` (the operations applied). Re-serialising the document drops YAML
+  comments. With no model configured, or when no valid patch comes back, the
+  endpoint returns `409` instead of a starter: a refinement is never faked.
+
+This endpoint never persists or deploys its candidate; Studio shows the nodes
+it added, changed or removed and requires an explicit Apply action.
 
 ## Version history and rollback
 

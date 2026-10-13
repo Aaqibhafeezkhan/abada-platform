@@ -475,7 +475,7 @@ Studio `VersionsPanel.test.tsx`.
 - The version list marks which version an Insight proposal adopted; the proposal
   page does not yet link back or offer rollback in one click.
 
-## E17 — Schema-driven natural-language authoring with patch-mode refine
+## E17 — Schema-driven natural-language authoring with patch-mode refine ✅ done
 
 **Goal.** Natural-language authoring always knows the current language, and a
 refinement changes only what was asked, shown as a reviewable patch.
@@ -531,6 +531,30 @@ the schema and the user's request and, in refine, the source the user already ha
 
 **Out of scope.** Multi-turn chat memory; authoring decision tables from
 natural language; generating tool server documents; any auto-apply.
+
+**As built (E17) ✅ done.** `AplPromptBuilder` builds the language reference
+from `apl-v1.schema.json` (the node types are found by scanning the schema, so
+E21's `for-each` appears in the next prompt without a change here);
+`AplPatchService` applies `addNode`, `removeNode`, `updateNode` and `setEntry`;
+`AplAuthoringService` creates a whole document and refines by patch, with
+repairs fed the path and message of each problem; the endpoint returns
+`summary` and `patch`; `InsightProposalGenerator` asks for a patch, so a
+proposal's diff is as small as its finding. Studio lists the nodes a refinement
+added, changed or removed above the editor. Tests: `AplPromptBuilderTest`,
+`AplPatchServiceTest`, `AplAuthoringServiceTest`, `AplAuthoringGoldenTest`
+(recorded answers, offline), Studio `nodeChanges.test.ts`.
+
+**Deviations (E17).**
+- The golden corpus has **13** recorded cases (the plan said twenty): five new
+  processes and eight refinements, two of which need a repair. An opt-in test
+  against a real provider is not written.
+- No `renameNode`: a patch adds the new node and removes the old one, so every
+  reference is a visible operation.
+- The patch is shown as a list of changed node ids, not as an overlay on the
+  canvas; undo of an accepted patch uses the editor's existing history.
+- `REFINE` with no model, or with no valid answer, returns `409` (it used to
+  return a starter that replaced the process).
+- Re-serialising a patched document drops YAML comments.
 
 ## E21 — Bounded for-each
 
