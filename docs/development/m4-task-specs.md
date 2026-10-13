@@ -211,7 +211,7 @@ pairs, a refused decision records nothing), schema and token upgrade tests
   the new signals through the existing findings view, with no new screen.
 - The `OpenApiContractTest` is unaffected (no endpoint changed).
 
-## E15 — Replay before approval ✱ never cut
+## E15 — Replay before approval ✱ never cut ✅ done
 
 **Goal.** A reviewer sees what a proposed change would have done to the last N
 real cases, and approves or rejects from that diff. A policy can make the replay
@@ -239,7 +239,51 @@ variables in the launch transaction under the project's evidence policy
 nothing. Tests: `PostgresStartInputTest` (three modes, encryption, retention,
 children), schema and token upgrade tests (→ V36).
 
-**Files.** `engine/src/main/resources/db/migration/V37__replay.sql`,
+**As built (E15) ✅ done.** `ReplayRunner` walks the proposed definition in
+memory with `ProcessInstance` itself; `ReplayDiffService` and `OriginalPathReader`
+compare the replayed path with the original's, read from history;
+`ReplayService` plans, runs and reports (V37 `replay_runs`, `replay_cases`),
+`ReplayWorker` claims cases under leases (`FOR UPDATE SKIP LOCKED`) and runs
+them outside any transaction through `ModelAgentPort`;
+`ProjectReplayController` serves the API; `InsightProposalService` refuses
+approvals the policy gates (`409 REPLAY_REQUIRED`); `EvidenceRetentionSweep`
+deletes finished runs after retention. Studio adds a Replay panel to the
+proposal page. Tests: `ReplayRunnerTest`, `ReplayDiffServiceTest`,
+`PostgresReplayTest` (selection and cases without inputs, isolation by table
+counts, diff and aggregate, same-source replay, budget, lease recovery, policy
+gate incl. stale checksum and rejection, strangers), `PostgresStartInputTest`,
+schema and token upgrade tests (→ V37), `SecurityAuthorizationContractTest`,
+Studio `ReplayPanel.test.tsx`.
+
+**Deviations (E15).** Decisions 1, 2, 6 and the staged definition changed
+while building; the replay is stronger on isolation but narrower on agents:
+- **No flagged instances and no staged version.** The spec's decision 1 had
+  replay cases run as real, flagged instances against a staged definition. The
+  runtime was found to touch the outbox, signals, the task inbox, instance
+  lists, Insight facts and workers from too many places for a flag to be safe.
+  The replay instead walks `ProcessInstance` (the same interpreter) in memory,
+  so it cannot reach any of them; `process_definitions.status` and
+  `process_instances.replay_run_id` were not added.
+- **No worker replay filter, and no tools.** Decision 2 had the agent worker
+  run replay work with read tools. The engine instead makes one model call per
+  agent step through the provider of the node's model (the engine already calls
+  models for Insight and authoring), outside any transaction, and does not run
+  tools: nodes with tools are flagged `toolsSkipped`, and `WOULD_CALL` results
+  do not exist. Replaying read tools through the worker is deferred.
+- **Human nodes** are answered from the original path in history; the original
+  comment is never kept, so rework prompts see a fixed placeholder.
+- **Called processes and delegations** are not replayed (`NEEDS_EXTERNAL`).
+- **Timers** are not collapsed: a timer or message wait stops the case.
+- **Start inputs were not recorded** before this work; E15a adds them (V36).
+  Cases started earlier cannot be replayed.
+- The policy gate applies to **every approval**, not only the final one.
+- Roles: project `REVIEWER`, `MAINTAINER` or `OWNER` plus the `insight:review`
+  authority; Studio shows the Replay panel to anyone who can open the proposal
+  and relies on the engine to refuse the rest.
+- The aggregate counts reviewed-agent overrides from the proposal's own
+  `reviewed_by`; a proposal without it reports none.
+
+**Files (as specified).** `engine/src/main/resources/db/migration/V37__replay.sql`,
 `ENGINE/replay/{ReplayService,ReplayCaseSelector,ReplayDiffService,ReplayProperties}.java` (new),
 `ENGINE/core/AbadaEngine.java` (replay flag handling),
 `ENGINE/persistence/entity/{ProcessDefinitionEntity,ProcessInstanceEntity}.java`,

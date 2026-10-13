@@ -40,10 +40,13 @@ public class EvidenceRetentionSweep {
     private final ActivityHistoryService history;
     private final TransactionTemplate transactions;
     private final com.abada.engine.persistence.repository.ProcessStartInputRepository startInputs;
+    private final com.abada.engine.persistence.repository.ReplayRunRepository replayRuns;
 
     public EvidenceRetentionSweep(AgentStepRepository steps, ActivityHistoryService history,
             TransactionTemplate transactions,
-            com.abada.engine.persistence.repository.ProcessStartInputRepository startInputs) {
+            com.abada.engine.persistence.repository.ProcessStartInputRepository startInputs,
+            com.abada.engine.persistence.repository.ReplayRunRepository replayRuns) {
+        this.replayRuns = replayRuns;
         this.startInputs = startInputs;
         this.steps = steps;
         this.history = history;
@@ -75,6 +78,8 @@ public class EvidenceRetentionSweep {
         } while (batch == BATCH);
         // Start inputs kept for replay (E15) follow the same retention.
         int inputs = transactions.execute(status -> startInputs.purgeDue(now));
+        // Finished replays are kept for the same retention; their cases go with them.
+        transactions.executeWithoutResult(status -> replayRuns.deleteDue(now));
         return new Result(purged, cleared, inputs);
     }
 

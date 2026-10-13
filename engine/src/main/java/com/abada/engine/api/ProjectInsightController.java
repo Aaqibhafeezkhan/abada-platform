@@ -36,7 +36,8 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/v1/projects/{projectId}/insight")
 public class ProjectInsightController {
     public record UpdatePolicyRequest(long expectedVersion, int requiredApprovals,
-                                      List<String> requiredLanes, String approvalMode) {}
+                                      List<String> requiredLanes, String approvalMode,
+                                      Boolean replayRequired, Integer replayMinCases) {}
 
     private final InsightProposalRepository proposals;
     private final InsightProposalReviewRepository reviews;
@@ -133,7 +134,8 @@ public class ProjectInsightController {
                 .map(lane -> "lane:" + lane).collect(java.util.stream.Collectors.joining(","));
         return ResponseEntity.ok(InsightApprovalPolicyDTO.from(policyService.update(projectId,
                 definitionKey, request.expectedVersion(), request.requiredApprovals(), selectors,
-                request.approvalMode(), access.identity().username())));
+                request.approvalMode(), access.identity().username(), request.replayRequired(),
+                request.replayMinCases())));
     }
 
     private InsightProposalEntity.Status parseStatus(String status) {

@@ -38,7 +38,7 @@ class PostgresSchemaUpgradeTest {
                 .load();
         assertThat(latest.migrate().success).isTrue();
         assertThat(latest.validateWithResult().validationSuccessful).isTrue();
-        assertThat(latest.info().current().getVersion().getVersion()).isEqualTo("36");
+        assertThat(latest.info().current().getVersion().getVersion()).isEqualTo("37");
 
         try (var connection = DriverManager.getConnection(
                 POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
@@ -251,6 +251,17 @@ class PostgresSchemaUpgradeTest {
             }
             try (var indexes = metadata.getIndexInfo(null, schema, "jobs", false, false)) {
                 assertThat(indexNames(indexes)).contains("idx_jobs_instance_token_kind");
+            }
+            // V37: replay runs and cases, and the policy columns that can require one.
+            for (String[] column : new String[][] {{"replay_runs", "proposal_checksum"}, {"replay_runs", "status"},
+                    {"replay_cases", "run_id"}, {"replay_cases", "diff_json"}, {"replay_cases", "lease_until"},
+                    {"insight_approval_policies", "replay_required"}, {"insight_approval_policies", "replay_min_cases"}}) {
+                try (var columns = metadata.getColumns(null, schema, column[0], column[1])) {
+                    assertThat(columns.next()).as(column[0] + "." + column[1]).isTrue();
+                }
+            }
+            try (var indexes = metadata.getIndexInfo(null, schema, "replay_cases", false, false)) {
+                assertThat(indexNames(indexes)).contains("idx_replay_cases_claim", "idx_replay_cases_run");
             }
             // V36: the variables a root instance started with, kept for replay.
             for (String column : new String[] {"instance_id", "deployment_id", "payload_mode", "inputs_enc",

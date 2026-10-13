@@ -72,6 +72,8 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/v1/projects/*/insight/**")
                         .hasAnyAuthority("SCOPE_insight:read", AbadaRoles.INSIGHT_REVIEWER,
                                 AbadaRoles.OPERATOR, AbadaRoles.ADMIN)
+                .requestMatchers(HttpMethod.POST, "/v1/projects/*/insight/proposals/*/replays/**")
+                        .hasAnyAuthority("SCOPE_insight:review", AbadaRoles.INSIGHT_REVIEWER, AbadaRoles.ADMIN)
                 .requestMatchers(HttpMethod.POST, "/v1/projects/*/insight/proposals/*/reviews")
                         .hasAnyAuthority("SCOPE_insight:review", AbadaRoles.INSIGHT_REVIEWER, AbadaRoles.ADMIN)
                 .requestMatchers(HttpMethod.PUT, "/v1/projects/*/insight/policies/**")
