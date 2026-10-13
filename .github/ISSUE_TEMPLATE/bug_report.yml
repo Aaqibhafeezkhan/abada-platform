@@ -1,0 +1,69 @@
+name: Bug report
+description: Something does not work as documented
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug. For security problems, use a
+        [private advisory](https://github.com/bashizip/abada-platform/security/advisories/new) instead.
+  - type: input
+    id: version
+    attributes:
+      label: Abada version
+      description: The image tag or the version printed by the installer.
+      placeholder: 1.1.0-rc.2
+    validations:
+      required: true
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      options:
+        - Installer / Compose
+        - Engine (API, runtime)
+        - Studio
+        - Agent worker
+        - Java worker SDK
+        - Documentation
+        - Not sure
+    validations:
+      required: true
+  - type: dropdown
+    id: deployment
+    attributes:
+      label: How are you running Abada?
+      options:
+        - One-line installer
+        - "./release/abada-platform up dev"
+        - Production Compose
+        - Kubernetes (k8s/)
+        - Engine only (spring-boot:run)
+        - Other
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What you did, what you expected and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: If possible, attach the APL/BPMN definition and the request that triggered the problem.
+      placeholder: |
+        1. Deploy …
+        2. Start an instance with …
+        3. See …
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: Remove tokens, API keys and sensitive payloads before pasting.
+      render: shell
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      placeholder: macOS 15 / Docker 28 / Chrome 140

@@ -4,6 +4,9 @@
 
 [![Licence: AGPL-3.0](https://img.shields.io/badge/licence-AGPL--3.0-34d399)](LICENSE)
 [![Release](https://img.shields.io/github/v/release/bashizip/abada-platform?include_prereleases&color=34d399)](https://github.com/bashizip/abada-platform/releases)
+[![CI](https://github.com/bashizip/abada-platform/actions/workflows/build-mvn.yml/badge.svg?branch=dev)](https://github.com/bashizip/abada-platform/actions/workflows/build-mvn.yml)
+[![Docs](https://img.shields.io/badge/docs-abadaplatform.com-34d399)](https://docs.abadaplatform.com)
+[![PRs welcome](https://img.shields.io/badge/PRs-welcome-34d399)](CONTRIBUTING.md)
 
 Abada is an open-source runtime for business processes in which AI agents, deterministic
 rules and people work together. It runs on your servers with PostgreSQL as its only
@@ -43,6 +46,11 @@ processes.
 
 Website: [abadaplatform.com](https://abadaplatform.com) · Documentation:
 [docs.abadaplatform.com](https://docs.abadaplatform.com)
+
+> **Try it in one command** — Docker is all you need:
+> `curl -fsSL https://install.abadaplatform.com/install.sh | bash`
+>
+> If Abada looks useful to you, a ⭐ on GitHub helps other developers find it.
 
 ---
 
@@ -224,10 +232,16 @@ are not yet scheduled; see the [deployment support matrix](docs/reference/deploy
 
 ## Contributing
 
-Read [`AGENTS.md`](AGENTS.md) for the working agreement: tests with every change,
-PostgreSQL as the reference for persistence behaviour, documentation updated alongside
-code, focused pull requests into `dev`, and Conventional Commit messages
-(`feat(runtime): …`, `fix(api): …`).
+Contributions of every size are welcome — a doc fix, a new example process, a bug report
+from your first install, or a worker client in another language.
+
+- Start with [`CONTRIBUTING.md`](CONTRIBUTING.md) and the issues labelled
+  [`good first issue`](https://github.com/bashizip/abada-platform/labels/good%20first%20issue).
+- [`AGENTS.md`](AGENTS.md) is the full working agreement: tests with every change,
+  PostgreSQL as the reference for persistence behaviour, documentation updated alongside
+  code, focused pull requests into `dev`, and Conventional Commit messages.
+- Report security issues privately, as described in [`SECURITY.md`](SECURITY.md).
+- Everyone taking part follows the [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ---
 
