@@ -26,6 +26,7 @@ import {
 import { TooltipProvider, UITooltip } from '@/components/ui';
 import { WorkerHealthPanel } from './WorkerHealthPanel';
 import { IncidentsPanel } from './IncidentsPanel';
+import { VersionsPanel } from './VersionsPanel';
 import {
   InstanceStatus,
   STATUS_META,
@@ -115,9 +116,11 @@ export const ProcessOperations: React.FC<{
   projectId?: string;
   /** Project OPERATOR or OWNER: may retry incidents (the engine enforces it too). */
   canRetryIncidents?: boolean;
+  /** Project operator, maintainer or owner: may roll a process back to an earlier version. */
+  canRollBack?: boolean;
   onOpenInstance?: (instance: ProcessInstanceDTO) => void;
   onOpenDetail?: (instance: ProcessInstanceDTO) => void;
-}> = ({ projectId, canRetryIncidents = false, onOpenInstance, onOpenDetail }) => {
+}> = ({ projectId, canRetryIncidents = false, canRollBack = false, onOpenInstance, onOpenDetail }) => {
   const [instances, setInstances] = useState<ProcessInstanceDTO[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(0);
@@ -445,6 +448,14 @@ export const ProcessOperations: React.FC<{
             void fetchKpis(projectId);
           }
         }}
+      />
+
+      {/* ===== Versions and rollback ===== */}
+      <VersionsPanel
+        projectId={projectId}
+        processKeys={[...new Set(definitions.map((definition) => definition.id))].sort()}
+        canRollBack={canRollBack}
+        onRolledBack={(key, version) => setToast(`Rolled ${cleanKey(key)} back to v${version}`)}
       />
 
       {/* ===== Filter toolbar ===== */}

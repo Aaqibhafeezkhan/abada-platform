@@ -45,6 +45,10 @@ public class SecurityConfig {
                         .hasAnyAuthority("SCOPE_project:create", AbadaRoles.PROJECT_CREATOR, AbadaRoles.ADMIN)
                 .requestMatchers(HttpMethod.POST, "/v1/projects/*/documents/*/deploy")
                         .hasAnyAuthority("SCOPE_process:deploy", AbadaRoles.DEPLOYER, AbadaRoles.ADMIN)
+                // A rollback deploys an earlier version: deployers and process controllers, like a deployment.
+                .requestMatchers(HttpMethod.POST, "/v1/projects/*/processes/*/versions/*/rollback")
+                        .hasAnyAuthority("SCOPE_process:deploy", "SCOPE_process:control", AbadaRoles.DEPLOYER,
+                                AbadaRoles.PROCESS_CONTROLLER, AbadaRoles.ADMIN)
                 .requestMatchers(HttpMethod.POST, "/v1/projects/*/authoring/generate").authenticated()
                 .requestMatchers(HttpMethod.POST, "/v1/projects/*/processes/*/start")
                         .hasAnyAuthority("SCOPE_process:control", AbadaRoles.PROCESS_CONTROLLER, AbadaRoles.ADMIN)

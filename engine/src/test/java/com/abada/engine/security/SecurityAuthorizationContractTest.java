@@ -335,6 +335,26 @@ class SecurityAuthorizationContractTest {
         // Allowed to read operations, but not a member of the project: it does not exist for them.
         mvc.perform(get(lineage).header("Authorization", "Bearer operator")).andExpect(status().isNotFound());
 
+        // Version history and rollback (E16): authenticated people only, and only members of the project.
+        String versions = "/v1/projects/" + ProjectConstants.DEFAULT_PROJECT_ID + "/processes/missing/versions";
+        String rollback = versions + "/1/rollback";
+        String why = "{\"comment\":\"x\"}";
+        for (var request : java.util.List.of(get(versions), get(versions + "/1/diff/2"),
+                post(rollback).contentType(MediaType.APPLICATION_JSON).content(why))) {
+            mvc.perform(request).andExpect(status().isUnauthorized());
+        }
+        mvc.perform(post(rollback).contentType(MediaType.APPLICATION_JSON).content(why)
+                        .header("Authorization", "Bearer expired")).andExpect(status().isUnauthorized());
+        mvc.perform(post(rollback).contentType(MediaType.APPLICATION_JSON).content(why)
+                        .header("X-Auth-Request-User", "forged").header("X-Auth-Request-Groups", "abada-admin"))
+                .andExpect(status().isUnauthorized());
+        assertForbidden(post(rollback).contentType(MediaType.APPLICATION_JSON).content(why), "worker");
+        // Operations access does not deploy; a deployer who is not a member of the project cannot see it.
+        assertForbidden(post(rollback).contentType(MediaType.APPLICATION_JSON).content(why), "operator");
+        mvc.perform(post(rollback).contentType(MediaType.APPLICATION_JSON).content(why)
+                        .header("Authorization", "Bearer deployer")).andExpect(status().isNotFound());
+        mvc.perform(get(versions).header("Authorization", "Bearer deployer")).andExpect(status().isNotFound());
+
         String payloads = "/v1/projects/" + ProjectConstants.DEFAULT_PROJECT_ID
                 + "/instances/missing/agent-steps/missing/payloads";
         mvc.perform(get(payloads)).andExpect(status().isUnauthorized());

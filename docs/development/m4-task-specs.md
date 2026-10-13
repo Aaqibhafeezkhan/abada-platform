@@ -331,7 +331,7 @@ significance testing; replaying BPMN-only definitions with no agent (they are
 allowed, but no agent-specific diff is promised); automatic adoption from a good
 replay (decision: humans own change).
 
-## E16 — One-click rollback ✱ never cut
+## E16 — One-click rollback ✱ never cut ✅ done
 
 **Goal.** An authorised person can return a process to a prior version with one
 action, and the history says who did it, from what and why.
@@ -390,6 +390,33 @@ same validation, same immutability, same pinning. Audit is append-only.
 
 **Out of scope.** Rolling back running instances to an earlier version;
 database or data rollback; bulk rollback across processes.
+
+**As built (E16) ✅ done.** V35 adds `rollback_of`, `deployed_by` and
+`deploy_comment` to `process_definitions`; `DefinitionVersionService` lists
+versions, diffs sources (`LineDiff`) and rolls back through `AbadaEngine.deploy`;
+`ProjectDefinitionVersionController` serves the three endpoints. Rollbacks
+serialize on a row lock on the project, then read the latest version in a fresh
+statement (a first attempt that locked "the newest definition row" read a stale
+version under PostgreSQL's snapshot rules and let both of two concurrent
+rollbacks succeed; `PostgresRollbackTest` now guards it). Studio adds a
+Versions and rollback panel under Operations. Tests: `PostgresRollbackTest`
+(source and pinning, history, rollback of a rollback, refusals that write
+nothing, a tool removed from the registry, two concurrent rollbacks, diff,
+strangers), `SecurityAuthorizationContractTest` (401s, forged proxy headers,
+worker/operator 403, non-member 404), schema and token upgrade tests (→ V35),
+Studio `VersionsPanel.test.tsx`.
+
+**Deviations (E16).**
+- The migration is V35 (V34 was taken by E14).
+- The second-approver option (`rollback_requires_second_approver`) is not built;
+  it needs the approval-task machinery for non-agent actions and is deferred.
+  Rollback is one action by an authorised person with a required comment.
+- Roles: project `OPERATOR`, `MAINTAINER` or `OWNER` plus the deployment
+  authority, rather than a new `process:rollback` permission.
+- Open proposals are superseded lazily, when next reviewed (as for any
+  redeployment), not eagerly at rollback time.
+- The version list marks which version an Insight proposal adopted; the proposal
+  page does not yet link back or offer rollback in one click.
 
 ## E17 — Schema-driven natural-language authoring with patch-mode refine
 

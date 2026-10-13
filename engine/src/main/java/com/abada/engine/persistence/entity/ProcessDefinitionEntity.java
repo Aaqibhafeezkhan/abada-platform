@@ -69,6 +69,25 @@ public class ProcessDefinitionEntity {
     @Column(name = "call_targets", columnDefinition = "TEXT")
     private String callTargets;
 
+    /** The version this one restores when it was created by a rollback (V35); null otherwise. */
+    @Column(name = "rollback_of")
+    private Integer rollbackOf;
+
+    /** Who deployed this version; null for versions deployed before V35. */
+    @Column(name = "deployed_by")
+    private String deployedBy;
+
+    /** The reason given for a rollback. */
+    @Column(name = "deploy_comment")
+    private String deployComment;
+
+    public Integer getRollbackOf() { return rollbackOf; }
+    public void setRollbackOf(Integer value) { this.rollbackOf = value; }
+    public String getDeployedBy() { return deployedBy; }
+    public void setDeployedBy(String value) { this.deployedBy = value; }
+    public String getDeployComment() { return deployComment; }
+    public void setDeployComment(String value) { this.deployComment = value; }
+
     public String getCallTargets() { return callTargets; }
     public void setCallTargets(String value) { this.callTargets = value; }
 

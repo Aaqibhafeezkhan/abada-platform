@@ -38,4 +38,5 @@ public interface InsightProposalRepository extends JpaRepository<InsightProposal
             InsightProposalEntity.Status status, String definitionKey, Pageable pageable);
 
     Page<InsightProposalEntity> findByDefinitionKey(String definitionKey, Pageable pageable);
+    java.util.Optional<InsightProposalEntity> findFirstByAdoptedDeploymentId(String adoptedDeploymentId);
 }

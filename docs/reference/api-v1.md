@@ -143,6 +143,26 @@ candidate at most twice, and returns a deterministic valid starter if the
 OpenAI-compatible provider is absent or unavailable. This endpoint never
 persists or deploys its candidate; Studio requires an explicit Apply action.
 
+## Version history and rollback
+
+- `GET /api/v1/projects/{projectId}/processes/{key}/versions` lists versions newest
+  first: version, deployment id, checksum, deployer, time, `origin`
+  (`DEPLOY`, `ROLLBACK`, `INSIGHT`), `rollbackOf`, the rollback comment, the
+  Insight proposal that adopted it, running instances and whether it is current.
+- `GET .../versions/{from}/diff/{to}` returns a unified source diff
+  (`identical`, `tooLarge`, `unified`).
+- `POST .../versions/{version}/rollback` with `{ "comment", "expectedLatest" }`
+  deploys that version's source as the next version and returns the new
+  definition. `comment` is required (at most 1000 characters). Errors: `400`
+  without a comment or with a dependency that no longer resolves (typed
+  deployment errors), `404`, `409` for a stale `expectedLatest` or a version that
+  is already current.
+
+Reading needs any project role; rolling back needs project `OPERATOR`,
+`MAINTAINER` or `OWNER` and the deployment authority (`process:deploy`,
+`process:control`, the deployer or process-controller group, or an administrator).
+See [runtime semantics](runtime-semantics.md#rollback).
+
 ## Project event stream
 
 `GET /api/v1/projects/{projectId}/events/stream` streams the project's
