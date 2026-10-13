@@ -246,6 +246,25 @@ export function aplToWorkflow(apl: APLDocument): WorkflowFile {
           onTimeout: aplNode.on_timeout,
         };
         break;
+      case 'for-each':
+        // Drawn and edited as a call; the loop's own fields ride along untouched.
+        wNode.type = 'call-process';
+        wNode.callProcessConfig = {
+          process: aplNode.process,
+          inputs: aplNode.inputs,
+          outputs: aplNode.outputs,
+          maxDepth: aplNode.max_depth,
+          onError: aplNode.on_error,
+          onTimeout: aplNode.on_timeout,
+          forEach: {
+            items: aplNode.items,
+            itemInput: aplNode.item_input,
+            maxItems: aplNode.max_items,
+            maxParallel: aplNode.max_parallel,
+            results: aplNode.results,
+          },
+        };
+        break;
       case 'script':
         wNode.type = 'script';
         wNode.scriptConfig = {
@@ -620,6 +639,25 @@ export function workflowToAPL(wf: WorkflowFile): APLDocument {
         service: node.engineTaskConfig?.service || 'abada:service',
         on_error: node.engineTaskConfig?.onError,
         on_timeout: node.engineTaskConfig?.onTimeout || undefined,
+        next: getNextNode(node.id, node.type),
+      } as APLNode);
+    } else if (node.type === 'call-process' && node.callProcessConfig?.forEach) {
+      const loop = node.callProcessConfig.forEach;
+      aplNodes.push({
+        ...baseNode,
+        type: 'for-each',
+        items: loop.items,
+        process: node.callProcessConfig.process ?? '',
+        item_input: loop.itemInput,
+        inputs: node.callProcessConfig.inputs && Object.keys(node.callProcessConfig.inputs).length
+          ? node.callProcessConfig.inputs : undefined,
+        outputs: node.callProcessConfig.outputs ?? {},
+        max_items: loop.maxItems,
+        max_parallel: loop.maxParallel,
+        results: loop.results,
+        max_depth: node.callProcessConfig.maxDepth,
+        on_error: node.callProcessConfig.onError,
+        on_timeout: node.callProcessConfig.onTimeout || undefined,
         next: getNextNode(node.id, node.type),
       } as APLNode);
     } else if (node.type === 'call-process') {

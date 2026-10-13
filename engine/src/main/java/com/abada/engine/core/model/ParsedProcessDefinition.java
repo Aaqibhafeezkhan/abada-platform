@@ -27,6 +27,8 @@ public class ParsedProcessDefinition implements Serializable {
     private final Map<String, List<String>> flowGraph = new HashMap<>();
     private Map<String, LoopMeta> loops = Map.of();
     private Map<String, CallProcessMeta> callProcesses = Map.of();
+    /** For-each nodes (E21); each is also in {@link #callProcesses}. */
+    private Map<String, ForEachMeta> forEach = Map.of();
     private Set<String> sensitiveVariables = Set.of();
     /** Agent node id to its {@code evidence} override: payloads mode (wire name) and retention days. */
     private Map<String, EvidenceOverride> evidenceOverrides = Map.of();
@@ -171,6 +173,16 @@ public class ParsedProcessDefinition implements Serializable {
     public ParsedProcessDefinition withCallProcesses(Map<String, CallProcessMeta> declared) {
         this.callProcesses = Map.copyOf(declared);
         return this;
+    }
+
+    public ParsedProcessDefinition withForEach(Map<String, ForEachMeta> declared) {
+        this.forEach = Map.copyOf(declared);
+        return this;
+    }
+
+    /** The for-each declared at an activity, or null for any other node. */
+    public ForEachMeta getForEach(String activityId) {
+        return forEach.get(activityId);
     }
 
     public CallProcessMeta getCallProcess(String activityId) {

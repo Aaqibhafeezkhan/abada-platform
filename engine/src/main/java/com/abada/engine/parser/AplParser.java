@@ -13,6 +13,7 @@ import com.abada.engine.core.model.AgentRouteMeta;
 import com.abada.engine.core.model.BoundaryMeta;
 import com.abada.engine.core.model.DelegationMeta;
 import com.abada.engine.core.model.DecisionTableMeta;
+import com.abada.engine.core.model.ForEachMeta;
 import com.abada.engine.core.model.LoopMeta;
 import com.abada.engine.core.model.ReviewedByMeta;
 import com.abada.engine.core.model.AgentWorkDescriptor;
@@ -109,7 +110,7 @@ public final class AplParser {
     public static final Set<String> SUPPORTED_TYPES = Set.of(
              "webhook", "end", "agent", "engine-task", "decision-table", "script",
              "approval-gate", "condition", "inclusive", "parallel", "event-gateway",
-             "message-catch", "timer", "signal", "human-input", "call-process");
+             "message-catch", "timer", "signal", "human-input", "call-process", "for-each");
 
     private static final String APL_VALIDATION_CODE = "ABADA-APL-VALIDATION-001";
 
@@ -309,6 +310,7 @@ public final class AplParser {
         Map<String, Object> endEvents = new LinkedHashMap<>();
         Map<String, LoopMeta> loops = new LinkedHashMap<>();
         Map<String, CallProcessMeta> callProcesses = new LinkedHashMap<>();
+        Map<String, ForEachMeta> forEachNodes = new LinkedHashMap<>();
         Map<String, ParsedProcessDefinition.EvidenceOverride> evidenceOverrides = new LinkedHashMap<>();
         Map<String, List<DelegationMeta>> delegations = new LinkedHashMap<>();
 
@@ -620,6 +622,23 @@ public final class AplParser {
                         }
                         callProcesses.put(nodeId, parseCallProcess(node, nodeId, nodeName, processId));
                     }
+                    case "for-each" -> {
+                        if (!node.hasNonNull("next")) {
+                            throw validation("next", "for-each node '" + nodeId + "' requires 'next'");
+                        }
+                        ForEachMeta forEach = parseForEach(node, nodeId);
+                        forEachNodes.put(nodeId, forEach);
+                        // Pinned, depth-checked and cancelled like a call; the item input is set by the engine.
+                        CallProcessMeta call = parseCallProcess(node, nodeId, nodeName, processId);
+                        Map<String, String> inputs = new LinkedHashMap<>(call.inputs());
+                        if (inputs.containsKey(forEach.itemInput())) {
+                            throw validation("inputs/" + forEach.itemInput(), "for-each node '" + nodeId + "' sets '"
+                                    + forEach.itemInput() + "' itself from each item; remove it from inputs");
+                        }
+                        inputs.put(forEach.itemInput(), ForEachMeta.ITEM_PLACEHOLDER);
+                        callProcesses.put(nodeId, new CallProcessMeta(nodeId, nodeName, call.processKey(), inputs,
+                                call.outputs(), call.maxDepth()));
+                    }
                     case "human-input" -> {
                         // Canonical APL field is `formKey`; `formId` remains a
                         // deprecated alias so existing documents keep deploying.
@@ -683,7 +702,7 @@ public final class AplParser {
         ParsedProcessDefinition definition = new ParsedProcessDefinition(definitionId, name, null, entry,
                 userTasks, serviceTasks, scriptTasks, decisionTables,
                 flows, gateways, events, endEvents,
-                rawSource, null, null).withLoops(loops).withBoundaries(boundaries).withCallProcesses(callProcesses)
+                rawSource, null, null).withLoops(loops).withBoundaries(boundaries).withCallProcesses(callProcesses).withForEach(forEachNodes)
                 .withEvidenceOverrides(evidenceOverrides).withAgentRoutes(agentRoutes)
                 .withDelegations(delegations).withReviews(reviews)
                 .withSensitiveVariables(AplVariables.sensitiveNames(root));
@@ -831,6 +850,49 @@ public final class AplParser {
             maxDepth = depth.asInt();
         }
         return new CallProcessMeta(nodeId, nodeName, process, inputs, outputs, maxDepth);
+    }
+
+    /** Most items any for-each may declare; the engine's own limit ({@code abada.for-each.max-items}) may be lower. */
+    public static final int MAX_FOR_EACH_ITEMS = 1000;
+    public static final int MAX_FOR_EACH_PARALLEL = 50;
+
+    /** {@code for-each}: the list expression, the item input, and the bounds that are required, never defaulted. */
+    private static ForEachMeta parseForEach(JsonNode node, String nodeId) {
+        String items = node.path("items").isTextual() ? node.path("items").asText().strip() : "";
+        if (items.isEmpty()) {
+            throw validation("items", "for-each node '" + nodeId + "' requires 'items': an expression for the list");
+        }
+        try {
+            com.abada.engine.expression.WorkflowExpressions.compile(items);
+        } catch (com.abada.engine.expression.ExpressionCompileException exception) {
+            throw validation("items", "for-each node '" + nodeId + "' items is not a valid expression: "
+                    + exception.getMessage());
+        }
+        String itemInput = node.path("item_input").asText("");
+        if (!VARIABLE.matcher(itemInput).matches()) {
+            throw validation("item_input", "for-each node '" + nodeId
+                    + "' requires 'item_input': the child variable that receives each item");
+        }
+        JsonNode maxItems = node.path("max_items");
+        if (!maxItems.isIntegralNumber() || maxItems.asInt() < 1 || maxItems.asInt() > MAX_FOR_EACH_ITEMS) {
+            throw validation("max_items", "for-each node '" + nodeId + "' requires 'max_items', an integer between 1 and "
+                    + MAX_FOR_EACH_ITEMS + ": the list is never unbounded");
+        }
+        int parallel = 1;
+        if (node.has("max_parallel")) {
+            JsonNode value = node.path("max_parallel");
+            if (!value.isIntegralNumber() || value.asInt() < 1 || value.asInt() > MAX_FOR_EACH_PARALLEL) {
+                throw validation("max_parallel", "for-each node '" + nodeId
+                        + "' max_parallel must be an integer between 1 and " + MAX_FOR_EACH_PARALLEL);
+            }
+            parallel = value.asInt();
+        }
+        String results = node.path("results").asText("");
+        if (!VARIABLE.matcher(results).matches()) {
+            throw validation("results", "for-each node '" + nodeId
+                    + "' requires 'results': the variable that receives the list of results");
+        }
+        return new ForEachMeta(nodeId, items, itemInput, maxItems.asInt(), parallel, results);
     }
 
     /**
@@ -1404,7 +1466,7 @@ public final class AplParser {
     }
 
     private static final Set<String> BOUNDARY_TYPES = Set.of("agent", "engine-task", "human-input", "approval-gate",
-            "call-process");
+            "call-process", "for-each");
 
     private static void addBoundary(String nodeId, JsonNode node, Map<String, JsonNode> nodesById,
             List<SequenceFlow> flows, Set<String> flowIds, List<BoundaryMeta> boundaries,

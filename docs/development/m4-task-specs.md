@@ -556,7 +556,7 @@ added, changed or removed above the editor. Tests: `AplPromptBuilderTest`,
   return a starter that replaced the process).
 - Re-serialising a patched document drops YAML comments.
 
-## E21 — Bounded for-each
+## E21 — Bounded for-each ✅ done
 
 **Goal.** A process can run the same governed child process over a list, with
 hard bounds, and gather the results without one bad item failing the rest.
@@ -625,6 +625,39 @@ parent, then child.
 **Out of scope.** Inline per-item bodies (decision 10); nested for-each beyond
 the E20 depth limit; streaming results; reduce or aggregate functions beyond
 gathering.
+
+**As built (E21) ✅ done.** The node is parsed into a `ForEachMeta` **and** a
+`CallProcessMeta` (its `inputs` carry a placeholder for `item_input`), so the
+child is pinned by `CallTargetService`, depth-checked, cancelled and drawn by
+the machinery calls already have, and `ProcessInstance` parks the token with no
+change. `AbadaEngine.startForEach` evaluates the list and refuses it before any
+child exists (`FOR_EACH_ITEMS_INVALID`, `FOR_EACH_TOO_MANY`); `dispatchForEach`
+keeps at most `max_parallel` items running; `forEachChildEnded` records a
+child's end in the `CHILD_DONE` job (parent locked, a recorded child ignored)
+and starts the next; `finishForEach` writes `results` and moves on, or takes
+`on_error` once with `FOR_EACH_ITEM_FAILED`. V38 `for_each_items` holds one row
+per item. Studio draws it as a call and keeps its fields verbatim. Tests:
+`AplForEachParserTest`, `PostgresForEachTest` (parallel window and order,
+failure after the others, empty and over-long lists, type mismatch, parent
+cancel, timeout, incident retry), `PostgresForEachCrashTest` (restarts with
+items in every state, two replicas), `ExampleGalleryTest`, schema and token
+upgrade tests (→ V38), Studio `parser.test.ts`.
+
+**Deviations (E21).**
+- The spec's `on_error` fires once, after every item has settled; a failed item
+  is a result entry (`ok: false`, `error`), as planned. A node without
+  `on_error` opens a `CHILD_FAILED` incident whose retry runs the whole list
+  again (rows are rebuilt), not just the failed items.
+- Item failures that never started a child (`CHILD_INPUT_INVALID`,
+  `CHILD_DEPTH_EXCEEDED`, `CHILD_START_REFUSED`) are item results too.
+- The hard caps are 1000 items / 50 parallel in the schema and the engine's
+  `abada.for-each.max-items` (100) and `abada.for-each.max-parallel` (20).
+- Studio shows a for-each as a call node (its loop fields round-trip but are
+  not editable in the inspector, as E12 did for `call-process` inputs); it has
+  no instance-page "n of m done" line.
+- Examples: `examples/apl/document-batch.apl.yaml` with its child
+  `document-check.apl.yaml`, and `review-triage.apl.yaml` for E14/E15. The seed
+  script under `scripts/dev/` for the demo corpus is not written.
 
 ## E18 — Static site, `/investors`, 3-minute video
 

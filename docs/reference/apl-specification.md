@@ -986,6 +986,15 @@ The `decision-table` node is the YAML surface of the native
 wall constraining agents. This section is the ADR-002 contract expressed in
 APL.
 
+### 3.16 `for-each` — a governed child per item
+
+`for-each` runs the child of a [`call-process`](#315-call-process--governed-child-process) once per item of a
+list (`items`), `max_parallel` at a time, and writes one result per item, in order, to `results`. `max_items`,
+`item_input` and `results` are required and the list is never unbounded: it is capped by `max_items` (at most
+1000) and by the engine's own `abada.for-each.max-items`. An item that fails does not stop the others; the node's
+`on_error` is taken once, after every item has settled, with the code `FOR_EACH_ITEM_FAILED`. Field reference:
+[`for-each` in the node reference](apl-node-reference.md#44b-for-each--for-each).
+
 ### 4.1 Compiled XML shape
 
 ```yaml

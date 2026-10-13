@@ -311,6 +311,49 @@ check, a KYC refresh) that several processes reuse.
 
 ---
 
+### 4.4b For Each — `for-each`
+
+**What it does.** Runs a governed child process once per item of a list, a bounded
+number at a time, and gathers one result per item into a list. It is a
+[`call-process`](#44a-call-process--call-process) repeated over a list: the child
+version is pinned at deployment, every item is its own instance with its own lock,
+audit trail and contract, and nothing but the declared outputs returns.
+
+```yaml
+- id: check_each
+  type: for-each
+  items: "${documents}"          # evaluates to a list
+  process: document_check
+  item_input: document           # the child variable that receives each item
+  inputs: { case_id: "${case_id}" }
+  outputs: { verdict: verdict }  # result field: child variable
+  max_items: 50                  # required: the list is never unbounded
+  max_parallel: 5                # default 1
+  results: check_results
+  on_error: manual_review
+  next: decide
+```
+
+| Field | Required | Meaning |
+| --- | --- | --- |
+| `items` | yes | Expression evaluated on the instance's variables. It must give a list; anything else fails the node with `FOR_EACH_ITEMS_INVALID`. |
+| `process`, `inputs`, `outputs`, `max_depth` | yes (`inputs`, `max_depth` optional) | As for `call-process`. `outputs` maps a field of each result entry to the child variable it is copied from. |
+| `item_input` | yes | The child variable that receives the current item. The engine sets it; it cannot also be in `inputs`. |
+| `max_items` | yes | At most 1000, and never more than the engine's `abada.for-each.max-items` (default 100). A longer list fails the node with `FOR_EACH_TOO_MANY` before any child exists. |
+| `max_parallel` | no (1) | At most 50, and never more than `abada.for-each.max-parallel` (default 20). |
+| `results` | yes | The variable that receives the list, in item order: `{ index, ok: true, outputs }` or `{ index, ok: false, error }`. |
+| `on_error`, `on_timeout`, `next` | as for `call-process` | |
+
+**Failure.** An item that fails (its child fails or is cancelled, its input does not fit the child's declared
+type, it cannot start) is recorded as a failed result; **the other items run to the end**. When every item has
+settled, `results` is written and, if any failed, `on_error` is taken once with the code
+`FOR_EACH_ITEM_FAILED` (a node without `on_error` opens a `CHILD_FAILED` incident, and retrying it runs the whole
+list again). An empty list passes straight to `next` with an empty `results`. A timeout, a cancel or a
+failure of the parent cancels the running children and starts no more. Item values are never written to the
+audit history, only counts.
+
+**BPMN equivalent.** None: BPMN `callActivity` with a multi-instance marker is rejected on import.
+
 ### 4.5 Script Step — `script`
 
 **What it does.** A small JavaScript snippet the engine runs **inside the

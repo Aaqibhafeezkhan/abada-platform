@@ -1,0 +1,48 @@
+version: abada.io/v1
+
+# A governed child process of the document-batch example: it checks one document.
+# Only `verdict` goes back to the batch.
+metadata:
+  key: document_check
+  name: Document check
+  owner: compliance
+  variables:
+    - { name: document, type: string, required: true }
+    - { name: case_id, type: string }
+    - { name: verdict, type: object }
+
+flow:
+  entry: received
+  nodes:
+    - id: received
+      type: webhook
+      description: One document to check
+      next: inspect
+
+    - id: inspect
+      type: agent
+      description: Decide whether the document is acceptable
+      model: gemini-3.6-flash
+      prompt: |
+        Check the document ${document} submitted for case ${case_id}. Answer with
+        verdict "accept" or "reject" and a one-sentence reason.
+      result_variable: verdict
+      output_schema:
+        type: object
+        required: [decision, reason]
+        properties:
+          decision: { enum: [accept, reject] }
+          reason: { type: string }
+      confidence_threshold: 80
+      on_low_confidence: second_look
+      next: done
+
+    # An unsure answer goes to a person instead of being guessed.
+    - id: second_look
+      type: human-input
+      description: A person decides on the document
+      assignees: [compliance]
+      next: done
+
+    - id: done
+      type: end

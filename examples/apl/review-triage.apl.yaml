@@ -1,0 +1,63 @@
+version: abada.io/v1
+
+# An agent drafts and a person reviews. `reviewed_by` tells the Insight loop which
+# review checks the agent, so it can notice when people keep overruling it and
+# propose a change, which can be replayed on real cases before anyone approves it.
+metadata:
+  key: review_triage
+  name: Reviewed triage
+  owner: support
+  variables:
+    - { name: ticket, type: object, required: true }
+
+flow:
+  entry: ticket-received
+  nodes:
+    - id: ticket-received
+      type: webhook
+      description: A support ticket arrived
+      next: triage
+
+    - id: triage
+      type: agent
+      description: Draft the first reply and a priority
+      model: gemini-3.6-flash
+      prompt: |
+        Draft the first reply to this ticket and rate its priority.
+        Reviewer feedback on the previous draft, if any: ${review_comment}
+        Ticket: ${ticket}
+      result_variable: draft
+      output_schema:
+        type: object
+        required: [reply, priority]
+        properties:
+          reply: { type: string }
+          priority: { enum: [low, normal, urgent] }
+      confidence_threshold: 70
+      reviewed_by: { node: review, accept: approve }
+      loop:
+        max_iterations: 3
+        on_exhausted: escalate
+      next: review
+
+    - id: review
+      type: human-input
+      description: Check the draft before it is sent
+      assignees: [support-leads]
+      outcomes:
+        approve: { next: send }
+        reject: { next: triage, comment: required }
+
+    - id: escalate
+      type: human-input
+      description: Three drafts were rejected; a lead writes the reply
+      assignees: [support-managers]
+      next: done
+
+    - id: send
+      type: engine-task
+      service: support.send-reply
+      next: done
+
+    - id: done
+      type: end
