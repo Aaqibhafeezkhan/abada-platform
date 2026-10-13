@@ -471,6 +471,16 @@ before this release have no inputs and cannot be replayed.
   (engine restarts after the child starts, between its end and the resume,
   with the job leased by a crashed replica; two replicas at once).
 
+### For-each
+
+A `for-each` node (E21) parks its token like a call and keeps one row per item in `for_each_items`
+(V38) for that visit. The rows are created in the parent's command; at most `max_parallel` items run, and the
+parent's lock serialises every change: each child's end schedules the same durable `CHILD_DONE` job a call
+uses, and that job (with the parent locked) records the item, starts the next pending one, and finishes the
+visit when none is left. A child already recorded is ignored, so a repeated job changes nothing, and a restart
+at any point leaves each item with exactly one child. Lock order is parent, then child. The visit's rows are
+deleted when the token leaves the node and rebuilt when an incident is retried.
+
 ## History and lifecycle delivery
 
 Activity history and its matching outbox event are written in the workflow

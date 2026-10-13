@@ -58,7 +58,8 @@ class ExampleGalleryTest {
         // Children first: call targets and delegates are pinned when the parent is deployed.
         for (String file : List.of("fraud-check.apl.yaml", "refund-payout.apl.yaml", "support-triage.apl.yaml",
                 "refund-agent.apl.yaml", "complaint-reply.apl.yaml", "lead-triage-demo.apl.yaml",
-                "kyc-onboarding.apl.yaml")) {
+                "kyc-onboarding.apl.yaml", "document-check.apl.yaml", "document-batch.apl.yaml",
+                "review-triage.apl.yaml")) {
             try (InputStream source = Files.newInputStream(EXAMPLES.resolve(file))) {
                 engine().deploy(PROJECT, source);
             }
@@ -76,7 +77,8 @@ class ExampleGalleryTest {
             assertThat(files.map(path -> path.getFileName().toString()).filter(name -> name.endsWith(".apl.yaml")))
                     .containsExactlyInAnyOrder("fraud-check.apl.yaml", "refund-payout.apl.yaml",
                             "support-triage.apl.yaml", "refund-agent.apl.yaml", "complaint-reply.apl.yaml",
-                            "lead-triage-demo.apl.yaml", "kyc-onboarding.apl.yaml");
+                            "lead-triage-demo.apl.yaml", "kyc-onboarding.apl.yaml", "document-check.apl.yaml",
+                            "document-batch.apl.yaml", "review-triage.apl.yaml");
         }
     }
 
@@ -134,6 +136,24 @@ class ExampleGalleryTest {
                     .doesNotContainKey("request");
         });
         assertThat(engine().getProcessInstanceById(instance.getId()).getActiveTokens()).containsExactly("payout");
+    }
+
+    @Test
+    void theM4ExamplesStartAndCarryTheirGovernance() {
+        // A batch runs a governed child per document, five at a time, and the rest wait their turn.
+        List<String> documents = new java.util.ArrayList<>();
+        for (int i = 0; i < 8; i++) documents.add("doc-" + i);
+        ProcessInstance batch = start("document_batch", Map.of("case_id", "K-7", "documents", documents));
+        assertThat(batch.getActiveTokens()).containsExactly("check_each");
+        assertThat(context.getBean(ProcessInstanceRepository.class)
+                .findByParentInstanceIdOrderByStartDateAsc(batch.getId())).hasSize(5);
+        assertThat(batch.getDefinition().getForEach("check_each").maxItems()).isEqualTo(25);
+
+        // The triage agent is checked by a named review whose accepting outcome is declared.
+        ProcessInstance triage = start("review_triage", Map.of("ticket", Map.of("text", "Where is my order?")));
+        assertThat(triage.getActiveTokens()).containsExactly("triage");
+        assertThat(triage.getDefinition().getReviewOf("triage").reviewNode()).isEqualTo("review");
+        assertThat(triage.getDefinition().getReviewOf("triage").accept()).isEqualTo("approve");
     }
 
     private static ProcessInstance start(String key, Map<String, Object> variables) {

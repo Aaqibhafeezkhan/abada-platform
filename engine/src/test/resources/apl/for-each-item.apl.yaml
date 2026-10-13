@@ -1,0 +1,14 @@
+version: abada.io/v1
+metadata:
+  key: document_check
+  name: Document check
+  variables:
+    - { name: document, type: string }
+    - { name: case_id, type: string }
+    - { name: verdict, type: string }
+flow:
+  entry: request
+  nodes:
+    - { id: request, type: webhook, next: check }
+    - { id: check, type: engine-task, service: doc.check, next: done }
+    - { id: done, type: end }

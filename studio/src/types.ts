@@ -139,6 +139,23 @@ export interface CallProcessConfig {
   maxDepth?: number;
   onError?: OnErrorRoute;
   onTimeout?: OnTimeoutRoute;
+  /**
+   * Set when the node is a `for-each` (E21): it runs the process once per item of a list. It is drawn as a call
+   * and kept verbatim; `outputs` then name the fields of each result entry.
+   */
+  forEach?: ForEachConfig;
+}
+
+/** The bounds and wiring of a `for-each` node. */
+export interface ForEachConfig {
+  /** Expression that evaluates to the list. */
+  items: string;
+  /** The child variable that receives each item. */
+  itemInput: string;
+  maxItems: number;
+  maxParallel?: number;
+  /** The parent variable that receives the list of results. */
+  results: string;
 }
 
 export interface EngineTaskConfig {
