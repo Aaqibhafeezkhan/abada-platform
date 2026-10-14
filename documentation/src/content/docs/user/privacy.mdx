@@ -1,0 +1,99 @@
+---
+title: Privacy and the install report
+description: What the running platform sends (nothing to Abada), what the installer reports once, what the download server records, and how to opt out.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## The short version
+
+- **The running platform never contacts Abada.** The Engine, Studio, the Agent
+  Worker and Keycloak talk only to what you configure: your database, your
+  identity provider, your model endpoint and, if you turn it on, your own
+  telemetry collector. [Telemetry](/user/telemetry/) stays off by default and
+  goes only to your collector.
+- **The Linux and macOS installer sends one anonymous report** when it
+  finishes, so we can tell how many installs succeed or fail and where they
+  fail. You can switch it off.
+- **The download server keeps a short log of downloads**: which file, when,
+  which release and the coarse location of the request. It cannot be switched
+  off for a download, because it is part of serving the file.
+
+Nothing here includes your processes, your data, your keys, your host name,
+your user name or your IP address.
+
+## What the installer reports
+
+`install.sh` sends a single request to `install.abadaplatform.com` when it
+exits, successful or not. The installer prints what it will do before it
+downloads anything. The report holds only these fields:
+
+| Field | Example | Why |
+| --- | --- | --- |
+| outcome | `install_succeeded` or `install_failed` | Is the install working for people? |
+| failed step | `download`, `verify`, `start`… | Where installs break |
+| Abada version | `1.1.0` | Which releases are in use |
+| install id | a random id the installer made; it is kept in `.abada-install-id` next to the install | Tells one install's report from another's |
+| operating system, CPU | `Darwin`, `arm64` | Which platforms to test |
+| Docker version | `27.3.1` | Which Docker versions to support |
+| profile, duration | `dev`, `212` seconds | How long an install takes |
+| key supplied | `true` or `false` | Whether a model key was provided at install (never the key) |
+| CI | `true` or `false` | Whether the `CI` variable was set, to separate automated installs |
+
+The **location** of the install (country and region only) is not sent by the
+installer. The receiving server derives it from the request's address when it
+arrives. The address itself is not stored, and nothing finer than the region
+is kept.
+
+The server accepts only the fields above and refuses anything else, so the
+installer cannot be made to send free text, file paths or names. You can read
+both ends:
+[`install/install.sh`](https://github.com/bashizip/abada-platform/blob/main/install/install.sh)
+and
+[`install/worker/worker.js`](https://github.com/bashizip/abada-platform/blob/main/install/worker/worker.js).
+
+## What the download server records
+
+When the installer script, the version pointer (`/latest`) or a release
+archive is requested, the server records: the time, what was requested (the
+script, the version check or the archive and its release) and the coarse
+location (country and region) derived from the request. Nothing else is taken
+from the request: no address, no hash of it, no user agent.
+
+## What is never recorded
+
+Your IP address (or any hash of it), city, network owner, host name, user name, file paths, environment variables, API
+keys, process definitions, database contents and anything you do after the
+install. The platform's own Docker images are pulled from the GitHub Container
+Registry, which, like any registry, sees those pulls; Abada does not.
+
+## How long and who sees it
+
+Records are deleted automatically after **13 months**. They are used to count
+installs and adopted versions, to find where installs fail and to decide which
+platforms to support. They are stored in Cloudflare, which hosts the download
+server, and are read by the maintainers of the project. Because a record holds
+no name, no address and no city, it cannot be tied to a person afterwards, so a request
+to delete "my" record cannot be matched to one.
+
+## Opt out
+
+```bash
+# For one install, for the whole pipeline (the variable goes to bash):
+curl -fsSL https://install.abadaplatform.com/install.sh | ABADA_USAGE_PING=0 bash
+
+# For every tool that honours it:
+export DO_NOT_TRACK=1
+```
+
+With either set the installer prints no notice and sends nothing. The
+installer also sends nothing when `ABADA_RELEASE_BASE_URL` points to a mirror.
+To avoid the download log as well, download the release archive from the
+[GitHub release](https://github.com/bashizip/abada-platform/releases) and run
+`./release/abada-platform up dev` from it, or serve it from your own mirror.
+
+<Aside type="note">
+Only `install.sh` sends a report. The PowerShell quickstart, the release
+archive and a `git clone` send nothing of their own; the downloads they make
+from `install.abadaplatform.com` appear in the download log described above.
+</Aside>

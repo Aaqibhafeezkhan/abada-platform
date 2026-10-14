@@ -1,5 +1,10 @@
 # Optional telemetry operations
 
+This page is about the platform's own OpenTelemetry export to *your* collector.
+It is unrelated to the anonymous report the Linux/macOS installer sends when it
+finishes (see [Privacy and the install report](https://docs.abadaplatform.com/user/privacy/)):
+the running platform never contacts Abada, whatever these settings are.
+
 Telemetry is diagnostic and is never part of a workflow-state transaction.
 `ABADA_TELEMETRY_ENABLED=false` and `OTEL_SDK_DISABLED=true` are the defaults.
 In that mode the engine registers a no-op `Tracer`, creates no OTLP exporters,

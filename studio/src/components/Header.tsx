@@ -17,6 +17,7 @@ import { WorkflowFile } from '@/types';
 import { keycloak } from '@/auth/keycloakClient';
 import { getGroupsFromToken } from '@/auth/keycloakClient';
 import { IconButton, TooltipProvider, UITooltip } from '@/components/ui';
+import { SoundToggle } from '@/components/SoundToggle';
 
 interface HeaderProps {
   currentWorkflow: WorkflowFile;
@@ -104,6 +105,7 @@ export const Header: React.FC<HeaderProps> = ({
             {(['designer', 'inbox', 'operations', 'insight'] as const).map(view => (
               <button
                 key={view}
+                data-cuelume-select
                 onClick={() => onViewChange?.(view)}
                 className={`text-xs px-4 py-1.5 rounded-lg capitalize transition-all font-medium whitespace-nowrap ${
                   currentView === view
@@ -120,6 +122,7 @@ export const Header: React.FC<HeaderProps> = ({
             {getGroupsFromToken().includes('abada-admin') && (
               <button
                 key="administration"
+                data-cuelume-select
                 onClick={() => onViewChange?.('administration')}
                 className={`text-xs px-4 py-1.5 rounded-lg capitalize transition-all font-medium whitespace-nowrap ml-1 ${
                   currentView === 'administration'
@@ -163,6 +166,7 @@ export const Header: React.FC<HeaderProps> = ({
               <UITooltip content="Dry Run — animate a local mocked scenario without saving, deploying, calling an LLM or creating an instance">
                 <button
                   type="button"
+                  data-cuelume-tap
                   onClick={onRunSimulation}
                   disabled={isSimulating}
                   className={`text-xs font-semibold px-4 py-1.5 rounded-xl transition-all flex items-center gap-2 shadow-warm-md ${
@@ -179,6 +183,7 @@ export const Header: React.FC<HeaderProps> = ({
               <UITooltip content="Deploy & Start — save the APL, publish an immutable engine definition and create a live process instance">
                 <button
                   type="button"
+                  data-cuelume-tap
                   onClick={onDeploy}
                   disabled={isDeploying}
                   className={`text-xs font-semibold px-4 py-1.5 rounded-lg transition-all flex items-center gap-2 ${
@@ -201,6 +206,8 @@ export const Header: React.FC<HeaderProps> = ({
             onClick={() => window.open('http://docs.localhost', '_blank', 'noopener,noreferrer')}
           />
 
+          <SoundToggle />
+
           <IconButton
             icon={<Settings className="w-4 h-4" />}
             label="Settings"
@@ -210,6 +217,7 @@ export const Header: React.FC<HeaderProps> = ({
 
           <button
             type="button"
+            data-cuelume-tap={keycloak.authenticated ? 'close' : 'tap'}
             onClick={() => {
               if (keycloak.authenticated) {
                 keycloak.logout({ redirectUri: window.location.origin });

@@ -6,11 +6,23 @@ set -euo pipefail
 #
 # Downloads the release archive, verifies its SHA-256 checksum,
 # extracts it, and starts the development stack.
+#
+# Anonymous install report: when it finishes, the installer sends ONE event to
+# install.abadaplatform.com (version, OS, CPU architecture, Docker version,
+# outcome and, on failure, the step; your country and region come from your IP
+# address at the receiving end, which is not stored). Nothing else leaves your
+# machine and the running platform sends nothing. Turn it off with
+#   ABADA_USAGE_PING=0   (for the pipeline: curl ... | ABADA_USAGE_PING=0 bash)
+# or DO_NOT_TRACK=1. Details: https://docs.abadaplatform.com/user/privacy/
 
 VERSION="${ABADA_VERSION:-}"
 INSTALL_DIR="${ABADA_INSTALL_DIR:-$PWD/abada-platform}"
 BASE_URL="${ABADA_RELEASE_BASE_URL:-https://install.abadaplatform.com}"
 BASE_URL="${BASE_URL%/}"
+DEFAULT_BASE_URL="https://install.abadaplatform.com"
+USAGE_ENDPOINT="${ABADA_USAGE_ENDPOINT:-${DEFAULT_BASE_URL}/v1/install-event}"
+STARTED_AT=$SECONDS
+STEP="preflight"
 
 info()  { printf '\033[1;34m[info]\033[0m  %s\n' "$*"; }
 ok()    { printf '\033[1;32m[ok]\033[0m    %s\n' "$*"; }
@@ -20,6 +32,75 @@ fail()  { printf '\033[1;31m[error]\033[0m %s\n' "$*" >&2; exit 1; }
 require_cmd() {
   command -v "$1" >/dev/null 2>&1 || fail "'$1' is required but not installed."
 }
+
+# --- anonymous install report --------------------------------------------------
+
+# Enabled unless the user opted out. Mirrors and tests (a non-default release
+# base URL) never report, unless a test names an endpoint explicitly.
+usage_ping_enabled() {
+  case "${ABADA_USAGE_PING:-1}" in 0|false|FALSE|no|NO|off|OFF) return 1 ;; esac
+  case "${DO_NOT_TRACK:-}" in ""|0) ;; *) return 1 ;; esac
+  [[ -n "${ABADA_USAGE_ENDPOINT:-}" || "$BASE_URL" == "$DEFAULT_BASE_URL" ]] || return 1
+  return 0
+}
+
+# Only characters that are safe inside a JSON string and never a path or a name.
+usage_clean() { printf '%s' "$1" | tr -cd 'A-Za-z0-9._+-' | cut -c1-40; }
+
+# A random id made here, not derived from the machine; it lets the outcome of
+# one install be told apart from another. Kept next to the install (mode 0600).
+usage_install_id() {
+  local file="${INSTALL_DIR}/.abada-install-id" id=""
+  if [[ -r "$file" ]]; then id="$(tr -cd '0-9a-f-' <"$file" | cut -c1-40)"; fi
+  if [[ ${#id} -lt 16 ]]; then
+    if command -v uuidgen >/dev/null 2>&1; then id="$(uuidgen | tr 'A-F' 'a-f')"
+    else id="$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"; fi
+    if [[ -d "$INSTALL_DIR" ]]; then ( umask 077; printf '%s\n' "$id" >"$file" ) 2>/dev/null || true; fi
+  fi
+  printf '%s' "$id"
+}
+
+# Called once, from the exit trap, with the installer's exit status. It can never
+# change that status or hold the installer up: a short timeout, errors ignored.
+send_usage_event() {
+  local status="$1"
+  usage_ping_enabled || return 0
+  local event="install_succeeded" payload docker_version version
+  [[ "$status" -eq 0 ]] || event="install_failed"
+  docker_version="$(usage_clean "$(docker version --format '{{.Server.Version}}' 2>/dev/null || true)")"
+  version="${VERSION:-}"
+  payload="{\"event\":\"${event}\""
+  [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z]+)*$ ]] && payload+=",\"version\":\"${version}\""
+  payload+=",\"install_id\":\"$(usage_install_id)\""
+  payload+=",\"os\":\"$(usage_clean "$(uname -s 2>/dev/null || true)")\""
+  payload+=",\"arch\":\"$(usage_clean "$(uname -m 2>/dev/null || true)")\""
+  [[ -n "$docker_version" ]] && payload+=",\"docker_version\":\"${docker_version}\""
+  payload+=",\"profile\":\"dev\",\"duration_s\":$(( SECONDS - STARTED_AT ))"
+  if [[ -n "${GEMINI_KEY:-}" || "${GEMINI_KEY_SET:-}" == "1" ]]; then payload+=",\"llm_key_provided\":true"; else payload+=",\"llm_key_provided\":false"; fi
+  if [[ -n "${CI:-}" ]]; then payload+=",\"ci\":true"; else payload+=",\"ci\":false"; fi
+  [[ "$event" == "install_failed" ]] && payload+=",\"failed_step\":\"${STEP}\""
+  payload+="}"
+  curl -m 3 --retry 0 -fsS -o /dev/null -X POST -H 'Content-Type: application/json' \
+    --data "$payload" "$USAGE_ENDPOINT" >/dev/null 2>&1 || true
+}
+
+if usage_ping_enabled; then
+  info "When it finishes, this installer sends one anonymous report to install.abadaplatform.com:"
+  info "version, OS, CPU architecture, Docker version, outcome. Your country and region come from"
+  info "your IP address, which is not stored. Opt out: ABADA_USAGE_PING=0 or DO_NOT_TRACK=1."
+fi
+
+# Runs on every exit, including a failed preflight: removes the download directory and sends the one
+# report (if enabled).
+DOWNLOAD_DIR=""
+cleanup() {
+  local status=$?
+  set +e
+  [[ -z "$DOWNLOAD_DIR" ]] || rm -rf "$DOWNLOAD_DIR"
+  send_usage_event "$status"
+  exit "$status"   # whatever the report did, the installer's own status is what the caller sees
+}
+trap cleanup EXIT
 
 # --- preflight ---------------------------------------------------------------
 
@@ -40,6 +121,7 @@ docker info >/dev/null 2>&1 || fail "Docker daemon is not running. Start Docker 
 # AES-encrypted in the database and serves agents and Insight alike — the
 # recommended path. Installation must never block on it.
 GEMINI_KEY="${ABADA_LLM_GEMINI_API_KEY:-${ABADA_AGENT_LLM_API_KEY:-}}"
+STEP="validate_key"
 if [[ -n "$GEMINI_KEY" ]]; then
   # Trim whitespace, quotes and carriage returns that terminals and editors
   # commonly introduce when pasting keys.
@@ -50,6 +132,7 @@ fi
 # Resolve the public pointer only when the caller did not request an exact
 # immutable version. The release workflow updates this object after the bundle,
 # checksum, public images, and clean-machine installation have all passed.
+STEP="resolve"
 if [[ -z "$VERSION" ]]; then
   info "Resolving the latest published Abada release ..."
   if ! VERSION="$(curl -fsSL --retry 3 --retry-delay 2 "${BASE_URL}/latest")"; then
@@ -62,10 +145,6 @@ fi
 
 ARCHIVE="abada-platform-${VERSION}.tar.gz"
 DOWNLOAD_DIR="$(mktemp -d "${TMPDIR:-/tmp}/abada-install.XXXXXX")"
-cleanup() {
-  rm -rf "$DOWNLOAD_DIR"
-}
-trap cleanup EXIT
 
 # If a key was provided, prove it works before starting containers so a typo
 # fails fast instead of surfacing later as failed agent/insight calls.
@@ -90,12 +169,14 @@ fi
 
 # --- download ----------------------------------------------------------------
 
+STEP="download"
 info "Downloading Abada ${VERSION} ..."
 curl -fSL --retry 3 --retry-delay 2 "${BASE_URL}/${ARCHIVE}" -o "${DOWNLOAD_DIR}/${ARCHIVE}"
 curl -fSL --retry 3 --retry-delay 2 "${BASE_URL}/${ARCHIVE}.sha256" -o "${DOWNLOAD_DIR}/${ARCHIVE}.sha256"
 
 # --- verify ------------------------------------------------------------------
 
+STEP="verify"
 info "Verifying SHA-256 checksum ..."
 CHECKSUM_FILE="${DOWNLOAD_DIR}/${ARCHIVE}.sha256"
 CHECKSUM_LINE="$(cat "$CHECKSUM_FILE")"
@@ -117,9 +198,12 @@ ok "Checksum verified."
 
 # --- extract -----------------------------------------------------------------
 
+STEP="extract"
 info "Extracting archive ..."
 mkdir -p "$INSTALL_DIR"
 tar -xzf "${DOWNLOAD_DIR}/${ARCHIVE}" --strip-components=1 -C "$INSTALL_DIR"
+
+STEP="configure"
 
 # Materialize the safe development template and inject only the local provider
 # configuration. The resulting file is intentionally untracked and mode 0600.
@@ -160,6 +244,7 @@ unset GEMINI_KEY
 
 # --- start -------------------------------------------------------------------
 
+STEP="start"
 info "Starting Abada development stack ..."
 "${INSTALL_DIR}/release/abada-platform" up dev
 

@@ -196,6 +196,7 @@ export const TaskInbox: React.FC<{ projectId?: string }> = ({ projectId }) => {
             {FILTERS.map((item) => (
               <button
                 key={item.key}
+                data-cuelume-select
                 onClick={() => setFilter(item.key)}
                 className={`flex-1 text-[11px] px-2 py-1 rounded-full transition-all font-medium ${
                   filter === item.key
@@ -224,6 +225,8 @@ export const TaskInbox: React.FC<{ projectId?: string }> = ({ projectId }) => {
               return (
                 <button
                   key={task.id}
+                  data-cuelume-select
+                  data-cuelume-emphasis="subtle"
                   onClick={() => selectTask(task)}
                   className={`w-full text-left p-3 rounded-xl border transition-all ${
                     selectedTask?.id === task.id
@@ -289,6 +292,7 @@ export const TaskInbox: React.FC<{ projectId?: string }> = ({ projectId }) => {
                 <div className="flex items-center gap-2 shrink-0">
                   {selectedTask.status === 'AVAILABLE' && (
                     <button
+                      data-cuelume-tap
                       onClick={handleClaim}
                       disabled={actionLoading}
                       className="flex items-center gap-1.5 text-xs font-semibold px-3.5 py-2 rounded-lg bg-[#2A9D8F] hover:bg-[#34bdae] text-[#1A1614] disabled:opacity-40 transition-all"
@@ -300,7 +304,8 @@ export const TaskInbox: React.FC<{ projectId?: string }> = ({ projectId }) => {
                   {selectedTask.status === 'CLAIMED' && (
                     <>
                       <button
-                        onClick={handleUnclaim}
+                        data-cuelume-tap
+                      onClick={handleUnclaim}
                         disabled={actionLoading}
                         className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg border border-[#3A322E] text-[#A89F91] hover:text-[#EAE3D9] disabled:opacity-40 transition-all"
                       >
@@ -310,7 +315,8 @@ export const TaskInbox: React.FC<{ projectId?: string }> = ({ projectId }) => {
                       {/* A review with outcomes is finished by a decision, not a plain completion. */}
                       {outcomes.length === 0 && (
                         <button
-                          onClick={handleComplete}
+                          data-cuelume-tap
+                      onClick={handleComplete}
                           disabled={actionLoading}
                           className="flex items-center gap-1.5 text-xs font-semibold px-3.5 py-2 rounded-lg bg-[#2A9D8F] hover:bg-[#34bdae] text-[#1A1614] disabled:opacity-40 transition-all"
                         >
@@ -323,6 +329,7 @@ export const TaskInbox: React.FC<{ projectId?: string }> = ({ projectId }) => {
                   {(selectedTask.status === 'AVAILABLE' || selectedTask.status === 'CLAIMED')
                     && selectedTask.kind !== 'TOOL_APPROVAL' && (
                     <button
+                      data-cuelume-tap
                       onClick={handleFail}
                       disabled={actionLoading}
                       title="Mark the task as failed"
@@ -366,7 +373,8 @@ export const TaskInbox: React.FC<{ projectId?: string }> = ({ projectId }) => {
                   {selectedTask.status === 'CLAIMED' && outcomes.length === 0 && (
                     <div className="mt-4 flex justify-end">
                       <button
-                        onClick={handleComplete}
+                        data-cuelume-tap
+                      onClick={handleComplete}
                         disabled={actionLoading}
                         className="flex items-center gap-1.5 text-xs font-semibold px-4 py-2 rounded-lg bg-[#2A9D8F] hover:bg-[#34bdae] text-[#1A1614] disabled:opacity-40 transition-all"
                       >
@@ -385,7 +393,8 @@ export const TaskInbox: React.FC<{ projectId?: string }> = ({ projectId }) => {
                 <div className="bg-[#25201D] border border-[#3A322E] rounded-2xl p-5 shadow-warm-md">
                   <h3 className="text-sm font-semibold text-[#F4A261] mb-3">Complete</h3>
                   <button
-                    onClick={handleComplete}
+                    data-cuelume-tap
+                      onClick={handleComplete}
                     disabled={actionLoading || selectedTask.status !== 'CLAIMED'}
                     className="flex items-center gap-1.5 text-xs font-semibold px-4 py-2 rounded-lg bg-[#2A9D8F] hover:bg-[#34bdae] text-[#1A1614] disabled:opacity-40 transition-all"
                   >
@@ -421,6 +430,7 @@ export const TaskInbox: React.FC<{ projectId?: string }> = ({ projectId }) => {
                     {outcomes.map((outcome) => (
                       <button
                         key={outcome.name}
+                        data-cuelume-tap
                         onClick={() => handleDecision(outcome)}
                         disabled={actionLoading || selectedTask.status !== 'CLAIMED'}
                         className={`flex items-center gap-1.5 text-xs font-semibold px-4 py-2 rounded-lg text-[#1A1614] disabled:opacity-40 transition-all capitalize ${

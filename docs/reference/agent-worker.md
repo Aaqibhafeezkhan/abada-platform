@@ -123,7 +123,8 @@ bounded conversation instead of a single call:
   with exactly the proposed arguments and the engine's key; a rejected one is
   answered to the model with the person's comment.
 - Limits: `max_turns` per attempt, `max_tokens_total` and `budget_usd` for the
-  whole task. The worker stops early; the engine refuses the next model call
+  whole task. A turn is a model call that answered (`COMPLETED`); a failed
+  call, such as an unavailable model, spends none. The worker stops early; the engine refuses the next model call
   either way. Both end the attempt with the routable code
   `AGENT_BUDGET_EXHAUSTED`. A budget with an unpriced model fails closed.
 - A lost lease, a deferral or a crash resumes the same attempt from the
@@ -173,7 +174,8 @@ bounded conversation instead of a single call:
   in the same lease, routing each to its provider like any model. It never
   switches because of the answer: invalid output and low confidence are the
   engine's output contract and go to their routes. When every model is
-  unavailable the worker reports a deferral: the attempt budget is kept and
+  unavailable the worker reports a deferral: the attempt budget is kept (an
+  unavailable call spends no `max_turns` turn, though the journal keeps it) and
   the engine retries after the longest `Retry-After` the providers sent (at
   most one hour), with a delay that doubles per deferral up to
   `abada.agent.max-deferral-delay` (default 15 minutes). After
@@ -248,7 +250,7 @@ The engine enforces an operator-defined allow-list of agent model ids. The
 engine rejects an APL document during deployment or authoring validation when
 an agent node declares a `model` outside
 `ABADA_AGENT_ALLOWED_MODELS` (a comma-separated list, default
-`gemini-3.6-flash,gemini-3.7-flash,gemini-3.8-flash,deepseek/deepseek-v4-flash-free,gpt-5-mini`).
+`gemini-3.6-flash,gemini-3.7-flash,gemini-3.8-flash,deepseek/deepseek-v4-flash,gpt-5-mini`).
 Each listed model also needs a configured provider (see the routing rules
 above) before a process using it can start. This makes the
 "cost control" claim local: an operator can restrict which model ids any

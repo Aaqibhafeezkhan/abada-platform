@@ -65,7 +65,7 @@ exist and how dangerous they are; the engine enforces both.
 - **Models.** `ABADA_AGENT_ALLOWED_MODELS` (comma-separated) is the operator
   allow-list. An `agent` node naming a model outside it **fails at deployment
   or authoring validation** — not at first execution. Default:
-  `gemini-3.6-flash,gemini-3.7-flash,gemini-3.8-flash,deepseek/deepseek-v4-flash-free,gpt-5-mini`.
+  `gemini-3.6-flash,gemini-3.7-flash,gemini-3.8-flash,deepseek/deepseek-v4-flash,gpt-5-mini`.
 - **Tool servers.** Tools are declared per project as tool server resources
   (MCP over streamable HTTP), each with a policy: `read`, `write` or
   `approval_required`. A node binds tools as `<server>/<tool>` and may only
@@ -85,7 +85,8 @@ exist and how dangerous they are; the engine enforces both.
   meanwhile the worker holds no lease and spends nothing.
 - **Limits and cost.** `max_turns`, `max_tokens_total` and `budget_usd` on the
   node bound the loop; reaching one ends the step through `on_error` with
-  `AGENT_BUDGET_EXHAUSTED`. Cost is computed by the engine from the token
+  `AGENT_BUDGET_EXHAUSTED`. Only model calls that answered count as turns, so
+  a provider outage does not spend them. Cost is computed by the engine from the token
   counts and the prices in **Settings → Model Prices** (USD per million tokens,
   effective-dated); a budget fails closed for an unpriced model.
 

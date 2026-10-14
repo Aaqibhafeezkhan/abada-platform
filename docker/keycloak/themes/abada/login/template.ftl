@@ -1,5 +1,5 @@
 <#-- Copied from Keycloak 21.1.1 base/login/template.ftl. Abada changes: SVG
-     favicon and the Studio brand header. Re-diff when upgrading Keycloak. -->
+     favicon, the Studio brand header and interaction sounds (js/sounds.js). Re-diff when upgrading Keycloak. -->
 <#macro registrationLayout bodyClass="" displayInfo=false displayMessage=true displayRequiredFields=false>
 <!DOCTYPE html>
 <html class="${properties.kcHtmlClass!}">
@@ -36,6 +36,7 @@
             <script src="${script}" type="text/javascript"></script>
         </#list>
     </#if>
+    <script src="${url.resourcesPath}/js/sounds.js" type="module"></script>
 </head>
 
 <body class="${properties.kcBodyClass!}">

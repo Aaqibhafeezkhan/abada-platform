@@ -220,8 +220,10 @@ public abstract class AbstractAgentGateway implements AgentGateway {
             JsonNode function = call.path("function");
             if (!function.path("name").isTextual()) continue;
             JsonNode arguments = function.path("arguments");
+            JsonNode extra = call.path("extra_content");
             calls.add(new ToolCall(call.path("id").asText("call_" + calls.size()), function.path("name").asText(),
-                    arguments.isTextual() ? arguments.asText() : arguments.isMissingNode() ? "{}" : arguments.toString()));
+                    arguments.isTextual() ? arguments.asText() : arguments.isMissingNode() ? "{}" : arguments.toString(),
+                    extra.isObject() ? extra : null));
         }
         if ((content == null || content.isBlank()) && calls.isEmpty()) {
             throw new AgentExecutionException(provider() + " gateway returned no assistant content");

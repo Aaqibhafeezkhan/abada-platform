@@ -6,10 +6,14 @@ The public Linux/macOS installer is:
 curl -fsSL https://install.abadaplatform.com/install.sh | bash
 ```
 
-The interactive installer reads a Gemini API key with hidden input from
-`/dev/tty`, validates `gemini-3.6-flash`, and stores it only in the untracked
-mode-`0600` `.env.dev`. Non-interactive automation must provide
-`ABADA_AGENT_LLM_API_KEY` to the `bash` process.
+The installer asks for nothing. An optional Gemini API key can be passed as
+`ABADA_LLM_GEMINI_API_KEY` (or the older `ABADA_AGENT_LLM_API_KEY`) to the
+`bash` process; it is validated against `gemini-3.6-flash` and stored only in
+the untracked mode-`0600` `.env.dev`. Without one, add a provider in Studio
+under Settings → AI Providers.
+
+When it finishes, the installer sends one anonymous report to this host (see
+*Install events* below). Opt out with `ABADA_USAGE_PING=0` or `DO_NOT_TRACK=1`.
 
 Alice (`alice` / `alice`) performs the one-time Starter initialization. Bob
 (`bob` / `bob`) is then the exclusive candidate for the HIGH human-review
@@ -54,6 +58,59 @@ downloads, and no GitHub token is present in the Worker or client.
 `install/public/install.sh` byte-identical; the distribution contract test
 enforces this. A release version is never hard-coded in either copy, so normal
 releases require no installer edit.
+
+## Install events
+
+The Worker records how the installer is used, so we know when and where Abada
+is installed and where installs fail. The user-facing description, which must
+stay true to this section, is
+[Privacy and the install report](../documentation/src/content/docs/user/privacy.mdx).
+
+| What | Recorded by | Opt-out |
+| --- | --- | --- |
+| `installer_fetch`, `version_check`, `bundle_download` | The Worker, when `/install.sh`, `/latest` or the archive is served | No: it is part of serving the file |
+| `install_succeeded`, `install_failed` | `install.sh`, once, from its exit trap, to `POST /v1/install-event` | `ABADA_USAGE_PING=0`, `DO_NOT_TRACK=1`, or a mirror (`ABADA_RELEASE_BASE_URL`) |
+
+Rows go to the D1 database `abada-usage` (`install_events`, see
+`worker/migrations/`). Location (country and region only) comes from Cloudflare's `request.cf` at
+request time. Nothing finer is stored: no city, network owner, time zone,
+address, hash of the address or user agent. Unique installers are counted by
+the random install id.
+The Worker accepts only the allow-listed fields in `EVENT_FIELDS`, caps
+reports per installer and day, and deletes rows older than 395 days in a daily
+scheduled run. Recording is best effort and can never delay or fail a download.
+
+Our own CI never counts as a user: the clean-runner install in
+`publish-release-bundle.yml` runs with `ABADA_USAGE_PING=0`, and a single smoke
+event marked `ci` proves the route is live.
+
+### One-time setup (owner)
+
+```bash
+cd install/worker
+npx wrangler d1 create abada-usage          # copy the printed database_id into wrangler.toml
+npx wrangler d1 migrations apply abada-usage --remote
+```
+
+`CF_API_TOKEN` also needs **D1 Edit** permission for the release workflow to
+apply later migrations. Until `database_id` is set, the release workflow
+deploys the Worker without the binding and prints a warning: nothing breaks,
+nothing is recorded.
+
+### Reading the data
+
+```bash
+./scripts/release/usage-report.sh summary      # last 30 days by kind and outcome
+./scripts/release/usage-report.sh daily 90     # per day: downloads, reports, distinct install ids
+./scripts/release/usage-report.sh countries    # where installs come from (country, region)
+./scripts/release/usage-report.sh failures     # failed installs by step
+./scripts/release/usage-report.sh versions | platforms | recent
+./scripts/release/usage-report.sh raw "SELECT ..."
+```
+
+Reports are a floor, not a count: anyone who opts out appears only as a
+download. Local testing: `wrangler dev --local` and
+`usage-report.sh … --local`.
 
 ## One-time Cloudflare and GitHub setup
 

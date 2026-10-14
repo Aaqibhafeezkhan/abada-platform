@@ -7,7 +7,7 @@ const KEPT = [
   { k: "Data", v: "PostgreSQL you operate" },
   { k: "Identity", v: "Your OIDC provider" },
   { k: "Models", v: "An OpenAI-compatible endpoint you choose, in your network if you want" },
-  { k: "Telemetry", v: "Off by default" },
+  { k: "Telemetry", v: "Off by default; the running platform never contacts us" },
 ];
 
 export function Hero() {

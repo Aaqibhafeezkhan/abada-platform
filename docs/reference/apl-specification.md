@@ -417,7 +417,7 @@ topic `abada:agent`. Its optional `agentWork` payload follows the versioned
 | `max_tokens` | integer | no | positive provider response bound |
 | `timeout_ms` | integer | no | 1–3,600,000 |
 | `max_attempts` | integer | no | 1–20 durable attempts |
-| `max_turns` | integer | no | 1–32, default 8: model calls per attempt while using tools |
+| `max_turns` | integer | no | 1–32, default 8: answered model calls per attempt while using tools (a call that failed, such as an unavailable model, spends no turn) |
 | `max_tokens_total` | integer | no | tokens for the whole task; default 50 000 when tools are bound |
 | `budget_usd` | number | no | engine-computed cost for the whole task; fails closed for an unpriced model |
 | `retry_backoff_ms` | integer | no | 0–3,600,000 |

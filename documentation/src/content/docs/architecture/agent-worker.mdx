@@ -117,7 +117,8 @@ sequenceDiagram
   the model gives it — it is neither sent nor approved again.
 - **Limits and cost.** `max_turns`, `max_tokens_total` and `budget_usd` are
   checked when a model call is journaled; cost is computed by the engine from
-  the model's price at the time of the call.
+  the model's price at the time of the call. A turn is a model call that
+  answered: an unavailable model the worker fell back from spends none.
 - **Bindings.** Only tools frozen in the definition's bindings may be
   journaled; anything else is refused.
 

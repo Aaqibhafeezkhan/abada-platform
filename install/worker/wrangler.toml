@@ -3,7 +3,9 @@ main = "worker.js"
 compatibility_date = "2024-09-23"
 workers_dev = false
 
-assets = { directory = "../public", binding = "ASSETS" }
+# Static files are served before the Worker runs, except /install.sh: the Worker must see that request to
+# record it (it still serves the file, through the ASSETS binding).
+assets = { directory = "../public", binding = "ASSETS", run_worker_first = ["/install.sh"] }
 
 [[routes]]
 pattern = "install.abadaplatform.com"
@@ -14,3 +16,16 @@ custom_domain = true
 [[r2_buckets]]
 binding = "R2_RELEASES"
 bucket_name = "abada-releases"
+
+# Install events (install/README.md, "Install events"). One-time setup:
+#   npx wrangler d1 create abada-usage        # then put the printed id below
+# Without the binding or the secret the Worker still serves everything and simply records nothing.
+[[d1_databases]]
+binding = "USAGE_DB"
+database_name = "abada-usage"
+database_id = "7a2ab244-fae4-4d6a-aef6-e47556852841"
+migrations_dir = "migrations"
+
+# Delete events past the retention period, once a day.
+[triggers]
+crons = ["17 3 * * *"]

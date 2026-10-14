@@ -95,6 +95,18 @@ class PostgresAgentLimitsTest {
     }
 
     @Test
+    void anUnavailableModelSpendsNoTurnButAnsweredCallsStillDo() {
+        LockedExternalTask task = startAndLock("unavailable_turns_case", "max_turns: 2", "");
+        // A provider outage: each fallback model fails unavailable (429/5xx/timeout) before it answers.
+        unavailableCall(task, 1, "gemini-3.6-flash");
+        unavailableCall(task, 2, "gemini-3.8-flash");
+        unavailableCall(task, 3, "gemini-3.7-flash");
+        modelCall(task, 4, MODEL, 1, 1);
+        modelCall(task, 5, MODEL, 1, 1);
+        assertRefused(task, 6, MODEL, "TURN_LIMIT");
+    }
+
+    @Test
     void tokensAndBudgetCapTheWholeTask() {
         LockedExternalTask tokens = startAndLock("tokens_case", "max_tokens_total: 100", "");
         modelCall(tokens, 1, MODEL, 60, 50);
@@ -138,6 +150,19 @@ class PostgresAgentLimitsTest {
     private static void modelCall(LockedExternalTask task, int sequence, String model, int prompt, int completion) {
         context.getBean(AgentStepService.class).record(task.id(), step(sequence, model, "COMPLETED", prompt,
                 completion));
+    }
+
+    private static void unavailableCall(LockedExternalTask task, int sequence, String model) {
+        AgentStepService service = context.getBean(AgentStepService.class);
+        service.record(task.id(), step(sequence, model, "STARTED", null, null));
+        try {
+            service.record(task.id(), new AgentStepRequest("w", 1, sequence, "MODEL_CALL", "FAILED", null,
+                    JSON.readTree("{\"turn\":" + sequence + "}"),
+                    JSON.readTree("{\"error\":\"AgentUnavailableException\"}"), "AgentUnavailableException", model,
+                    "p1", null, null));
+        } catch (Exception exception) {
+            throw new AssertionError(exception);
+        }
     }
 
     private static void assertRefused(LockedExternalTask task, int sequence, String model, String reason) {

@@ -89,6 +89,7 @@ export default defineConfig({
             { label: 'Production identity', slug: 'user/identity' },
             { label: 'Single-VM server', slug: 'user/server' },
             { label: 'Telemetry', slug: 'user/telemetry' },
+            { label: 'Privacy and the install report', slug: 'user/privacy' },
             { label: 'Scaling', slug: 'user/scaling' },
             { label: 'Backup and upgrades', slug: 'user/backup-upgrade' },
           ],

@@ -175,6 +175,29 @@
           "path": "engine/src/test/java/com/abada/engine/core/delegation/PostgresForEachCrashTest.java"
         }
       ]
+    },
+    {
+      "id": "installer-report-disclosed",
+      "status": "released",
+      "text": "The running platform never contacts Abada. The Linux and macOS installer sends one anonymous report when it finishes, limited to a fixed list of fields, with only country and region derived server-side and no IP address stored; it can be switched off with ABADA_USAGE_PING=0 or DO_NOT_TRACK=1.",
+      "proof": [
+        {
+          "path": "install/worker/worker.js",
+          "contains": "EVENT_FIELDS"
+        },
+        {
+          "path": "install/worker/worker.test.js",
+          "contains": "refuses anything that is not on the list"
+        },
+        {
+          "path": "scripts/test/verify-install-distribution.sh",
+          "contains": "Every way to opt out sends nothing"
+        },
+        {
+          "path": "documentation/src/content/docs/user/privacy.mdx",
+          "contains": "The running platform never contacts Abada"
+        }
+      ]
     }
   ]
 }

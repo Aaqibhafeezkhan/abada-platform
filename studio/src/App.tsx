@@ -35,6 +35,7 @@ import { keycloak } from '@/auth/keycloakClient';
 import { stringifyAPLYaml, workflowToAPL } from '@/lib/apl/parser';
 import { AplEditor } from '@/features/designer/AplEditor';
 import { useToast } from '@/components/ToastContext';
+import { playCue } from '@/lib/sound';
 import { useProjectWorkspace } from '@/hooks/useProjectWorkspace';
 import { useLiveInstanceOverlay } from '@/hooks/useLiveInstanceOverlay';
 import { useDryRunSimulation } from '@/hooks/useDryRunSimulation';
@@ -106,19 +107,31 @@ export default function App() {
   // Engine validation of the document on the canvas, badged on the nodes it is about.
   const validation = useAplValidation(currentWorkflow, designerMode === 'diagram' && !!activeProject);
 
-  // Undo/redo for the open process. Text fields keep their own native undo,
-  // and nothing happens while a modal dialog is open.
+  // Undo/redo for the open process, with a whoosh back or forward.
+  const undoEdit = useCallback(() => {
+    if (!canUndo) return;
+    playCue('navigate', { emphasis: 'subtle', direction: 'back' });
+    undo();
+  }, [canUndo, undo]);
+  const redoEdit = useCallback(() => {
+    if (!canRedo) return;
+    playCue('navigate', { emphasis: 'subtle', direction: 'forward' });
+    redo();
+  }, [canRedo, redo]);
+
+  // Text fields keep their own native undo, and nothing happens while a modal
+  // dialog is open.
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       const shortcut = undoShortcut(event);
       if (!shortcut || isEditableTarget(event.target) || isLiveReadOnly || designerMode !== 'diagram') return;
       if (document.querySelector('[aria-modal="true"]')) return;
       event.preventDefault();
-      if (shortcut === 'undo') undo(); else redo();
+      if (shortcut === 'undo') undoEdit(); else redoEdit();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [undo, redo, isLiveReadOnly, designerMode]);
+  }, [undoEdit, redoEdit, isLiveReadOnly, designerMode]);
 
   // Load the saved AI model and the engine's APL contract on startup
   useEffect(() => {
@@ -192,6 +205,7 @@ export default function App() {
   };
 
   const handleAutoLayout = (layoutedNodes: WorkflowNode[]) => {
+    if (!currentWorkflow.layoutPending) playCue('navigate', { emphasis: 'subtle' });
     // The automatic first layout of a newly opened process is not an undo step.
     updateActiveWorkflow((wf) => ({ ...wf, nodes: layoutedNodes, layoutPending: false }),
       currentWorkflow.layoutPending ? null : undefined);
@@ -206,12 +220,14 @@ export default function App() {
 
   const handleDeleteNode = (id: string) => {
     // Routes elsewhere that pointed at the node are cleared, so saving never references it.
+    playCue('close');
     updateActiveWorkflow((wf) => dropNodeReferences(wf, id));
     if (selectedNodeId === id) setSelectedNodeId(null);
   };
 
   /** Deletes an edge; a route edge clears the route it stands for. One undo step. */
   const handleDeleteEdge = (edgeId: string) => {
+    playCue('close', { emphasis: 'subtle' });
     updateActiveWorkflow((wf) => removeEdge(wf, edgeId));
   };
 
@@ -230,6 +246,7 @@ export default function App() {
   };
 
   const handleAddNode = (type: NodeType, subtype?: EventSubtype | GatewaySubtype) => {
+    playCue('tap', { emphasis: 'strong' });
     const id = `${type}-${Date.now()}`;
     const isFirstEvent = type === 'event'
       && !currentWorkflow.nodes.some((node) => node.type === 'event' && node.subtype === 'start');
@@ -286,6 +303,7 @@ export default function App() {
       && currentWorkflow.edges.some((e) => e.source === sourceId && e.target === targetId && !isOutcomeRouteEdge(e))) {
       return;
     }
+    playCue('toggle');
     updateActiveWorkflow((wf) => setRoute(wf, sourceId, route, targetId));
   };
 
@@ -400,7 +418,7 @@ export default function App() {
       setInstancesRefreshKey((value) => value + 1);
       showToast(warningCount > 0 ? 'warning' : 'success', warningCount > 0
         ? `Deployed and started with ${warningCount} APL warning${warningCount === 1 ? '' : 's'}; see the log panel.`
-        : 'Successfully deployed workflow and started process instance.');
+        : 'Successfully deployed workflow and started process instance.', undefined, { emphasis: 'strong' });
       await openLiveInstance(instance);
     } catch (err: any) {
       setSimulationLogs(prev => [...prev, { id: `deploy-${Date.now()}-err`, timestamp: new Date().toLocaleTimeString(), nodeId: 'system', nodeTitle: 'Deploy & Start Error', nodeType: 'event', status: 'error', message: `Deploy & Start failed: ${err.message}` }]);
@@ -691,8 +709,8 @@ export default function App() {
                     executionStatuses={executionStatuses}
                     activeLiveNodeIds={activeLiveNodeIds}
                     readOnly={false}
-                    onUndo={undo}
-                    onRedo={redo}
+                    onUndo={undoEdit}
+                    onRedo={redoEdit}
                     canUndo={canUndo}
                     canRedo={canRedo}
                   />

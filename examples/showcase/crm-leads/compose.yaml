@@ -1,0 +1,139 @@
+# CRM showcase overlay: Twenty CRM, its MCP facade and the CRM worker, added to
+# the Abada development stack. Use ./showcase.sh rather than calling this file
+# directly; it adds the base files, the env files and the agent profile.
+#
+#   crm.localhost        Twenty CRM (sign in as tim@apple.dev / tim@apple.dev)
+#   crm-mcp:8770/mcp     MCP tool server the agent uses (edge network only)
+#   crm-worker           external worker for topic crm.create-opportunity
+services:
+  # --- Abada: allow the plain-http dev tool server and the `crm` server ------
+  abada-engine:
+    environment:
+      # Tool server URLs must be https outside loopback; this is a dev stack.
+      ABADA_TOOLS_ALLOWINSECUREHTTP: "true"
+
+  abada-agent-worker:
+    environment:
+      # The operator's allow-list: the agent worker may reach the `crm` server.
+      ABADA_AGENT_ALLOWED_TOOLS: crm
+
+  # --- Twenty CRM (https://twenty.com, AGPL-3.0) ------------------------------
+  twenty-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: twenty
+      POSTGRES_USER: twenty
+      POSTGRES_PASSWORD: ${TWENTY_DB_PASSWORD:-twenty_dev_password}
+    volumes:
+      - twenty_db:/var/lib/postgresql/data
+    networks: [crm]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U twenty -d twenty"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  twenty-redis:
+    image: redis:7.4-alpine
+    command: ["--maxmemory-policy", "noeviction"]
+    networks: [crm]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  twenty-server:
+    image: twentycrm/twenty:${TWENTY_TAG:-v2.45.8}
+    environment: &twenty-env
+      NODE_PORT: "3000"
+      SERVER_URL: http://crm.localhost
+      PG_DATABASE_URL: postgres://twenty:${TWENTY_DB_PASSWORD:-twenty_dev_password}@twenty-db:5432/twenty
+      REDIS_URL: redis://twenty-redis:6379
+      APP_SECRET: ${TWENTY_APP_SECRET:?run ./showcase.sh up, it generates the showcase .env}
+      ENCRYPTION_KEY: ${TWENTY_ENCRYPTION_KEY:?run ./showcase.sh up, it generates the showcase .env}
+      STORAGE_TYPE: local
+      SIGN_IN_PREFILLED: "true"
+    volumes:
+      - twenty_storage:/app/packages/twenty-server/.local-storage
+    networks: [crm, edge]
+    restart: unless-stopped
+    depends_on:
+      twenty-db: { condition: service_healthy }
+      twenty-redis: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail --silent http://localhost:3000/healthz"]
+      interval: 5s
+      timeout: 5s
+      retries: 60
+      start_period: 30s
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.crm-dev.rule: Host(`crm.localhost`)
+      traefik.http.routers.crm-dev.entrypoints: web
+      traefik.http.services.crm-dev.loadbalancer.server.port: "3000"
+
+  twenty-worker:
+    image: twentycrm/twenty:${TWENTY_TAG:-v2.45.8}
+    command: ["yarn", "worker:prod"]
+    environment:
+      <<: *twenty-env
+      DISABLE_DB_MIGRATIONS: "true"
+      DISABLE_CRON_JOBS_REGISTRATION: "true"
+    volumes:
+      - twenty_storage:/app/packages/twenty-server/.local-storage
+    networks: [crm]
+    restart: unless-stopped
+    depends_on:
+      twenty-server: { condition: service_healthy }
+
+  # --- The two integration pieces of the showcase ------------------------------
+  # MCP facade the agent worker calls (tool server `crm`). It holds the Twenty
+  # API key; Abada only knows the bearer token crm-mcp expects.
+  crm-mcp:
+    image: python:3.12-alpine
+    command: ["python", "-u", "/app/crm_mcp.py"]
+    environment:
+      TWENTY_URL: http://twenty-server:3000
+      TWENTY_API_KEY: ${TWENTY_API_KEY:-}
+      CRM_MCP_TOKEN: ${CRM_MCP_TOKEN:-}
+    volumes:
+      - ./examples/showcase/crm-leads/mcp/crm_mcp.py:/app/crm_mcp.py:ro
+    networks: [edge]
+    restart: unless-stopped
+    profiles: [crm-apps]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8770/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  # External worker for topic crm.create-opportunity (Abada Java SDK).
+  crm-worker:
+    image: abada-showcase-crm-worker:local
+    build:
+      context: .
+      dockerfile: examples/showcase/crm-leads/crm-worker/Dockerfile
+    environment:
+      ABADA_ENGINE_URL: http://abada-engine:5601/api
+      ABADA_OIDC_TOKEN_URL: http://keycloak.localhost/realms/abada-dev/protocol/openid-connect/token
+      ABADA_OIDC_CLIENT_ID: crm-worker
+      ABADA_OIDC_CLIENT_SECRET: ${CRM_WORKER_CLIENT_SECRET:-}
+      TWENTY_URL: http://twenty-server:3000
+      TWENTY_PUBLIC_URL: http://crm.localhost
+      TWENTY_API_KEY: ${TWENTY_API_KEY:-}
+    networks: [edge]
+    restart: unless-stopped
+    profiles: [crm-apps]
+    depends_on:
+      abada-engine: { condition: service_healthy }
+
+volumes:
+  twenty_db:
+  twenty_storage:
+
+networks:
+  crm:
+    driver: bridge
