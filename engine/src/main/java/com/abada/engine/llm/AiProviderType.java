@@ -21,7 +21,7 @@ public enum AiProviderType {
             List.of("deepseek-"), "deepseek-chat", null),
     OPENROUTER("openrouter", "OpenRouter", "https://openrouter.ai/api/v1",
             List.of("deepseek/", "meta-llama/", "mistralai/", "qwen/", "x-ai/", "openrouter/"),
-            "deepseek/deepseek-v4-flash-free", null),
+            "deepseek/deepseek-v4-flash", null),
     OPENAI_COMPATIBLE("openai-compatible", "OpenAI-compatible", null, List.of("*"), null, null);
 
     private final String id;

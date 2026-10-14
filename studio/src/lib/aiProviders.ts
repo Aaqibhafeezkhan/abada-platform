@@ -20,7 +20,7 @@ export const AI_PROVIDER_PRESETS: readonly AiProviderPreset[] = [
   { type: 'openai', label: 'OpenAI', id: 'openai', baseUrl: 'https://api.openai.com/v1', modelPatterns: ['gpt-', 'o1', 'o3', 'o4', 'openai/'], defaultModel: 'gpt-5-mini', keyHelp: 'OpenAI API key' },
   { type: 'anthropic', label: 'Anthropic', id: 'anthropic', baseUrl: 'https://api.anthropic.com/v1', modelPatterns: ['claude', 'anthropic/'], defaultModel: 'claude-sonnet-5', keyHelp: 'Anthropic API key' },
   { type: 'deepseek', label: 'DeepSeek', id: 'deepseek', baseUrl: 'https://api.deepseek.com/v1', modelPatterns: ['deepseek-'], defaultModel: 'deepseek-chat', keyHelp: 'DeepSeek API key' },
-  { type: 'openrouter', label: 'OpenRouter', id: 'openrouter', baseUrl: 'https://openrouter.ai/api/v1', modelPatterns: ['deepseek/', 'meta-llama/', 'mistralai/', 'qwen/', 'x-ai/', 'openrouter/'], defaultModel: 'deepseek/deepseek-v4-flash-free', keyHelp: 'OpenRouter API key' },
+  { type: 'openrouter', label: 'OpenRouter', id: 'openrouter', baseUrl: 'https://openrouter.ai/api/v1', modelPatterns: ['deepseek/', 'meta-llama/', 'mistralai/', 'qwen/', 'x-ai/', 'openrouter/'], defaultModel: 'deepseek/deepseek-v4-flash', keyHelp: 'OpenRouter API key' },
   { type: 'openai-compatible', label: 'Custom (OpenAI-compatible)', id: 'custom', baseUrl: null, modelPatterns: ['*'], defaultModel: null, keyHelp: 'Gateway API key' },
 ];
 
