@@ -3,6 +3,29 @@
 Drafts to adapt, not paste blindly. Re-check every claim against the current release notes
 before posting. Items marked **[verify]** must be confirmed or removed.
 
+**Updated for `1.1.0`** (gate signed 2026-10-14, [release notes](../release-notes/1.1.0-release-notes.md)).
+`1.1.0` is the first release after the RC line, but it is still described as an
+**evaluation release**: never call it "production-ready" or "GA" in launch copy.
+
+## The 1.1.0 launch angle
+
+**Headline:** *Abada 1.1.0 — AI processes that improve only with your approval.*
+
+The story in three beats, each backed by the 1.1.0 release notes:
+
+1. **It notices.** When people keep overruling an agent, Insight reports it per agent node
+   (override rate, calibration gap, confidence drift, cost per case — at least 20 reviewed
+   samples, no per-person statistics).
+2. **It proposes and shows its evidence.** A proposed change can be replayed on the newest
+   finished cases before anyone approves it, and a policy can require that replay.
+3. **People decide, and can undo.** Nothing auto-applies; an approved change becomes a new
+   immutable version, and one click rolls back to a previous one. Running instances stay on
+   the version they started on.
+
+Always pair beat 2 with its limit: *a replay is evidence, not a verdict — it does not run
+tools, called processes, timers or messages, and instances started before 1.1.0 cannot be
+replayed.*
+
 ## Positioning
 
 **One line:** Abada is the open-source, self-hosted runtime where AI agents advise, rules
@@ -26,6 +49,10 @@ answer is allowed to change, who approves it, or what the auditor sees afterward
 | Rules are sandboxed CEL, rejected at deployment when unsafe | `docs/reference/bpmn-support.md` |
 | Processes are YAML (APL) you review in a pull request; BPMN 2.0 and Camunda 7 definitions import | `docs/reference/apl-specification.md`, docs "BPMN import and compatibility" |
 | Self-hosted: your PostgreSQL, your OIDC, your model endpoint (any OpenAI-compatible gateway), telemetry off by default | `docs/reference/agent-worker.md`, README |
+| Insight reports override rate, calibration gap, confidence drift and cost per case for reviewed agents | `docs/release-notes/1.1.0-release-notes.md` (E14) |
+| A proposed change can be replayed on recent real cases before approval; a policy can require it | same (E15) — tools are not run during a replay |
+| Version history, source diff and one-click rollback; running instances keep their version | same (E16) |
+| `for-each` runs a governed child process per list item, bounded by `max_items` and `max_parallel` | same (E21) |
 | AGPL-3.0, no enterprise edition; worker SDK Apache-2.0 | `LICENSE`, `sdk/java/LICENSE` |
 
 **Audiences and hooks**
@@ -33,15 +60,16 @@ answer is allowed to change, who approves it, or what the auditor sees afterward
 | Audience | Hook | Where they are |
 | --- | --- | --- |
 | Java/Spring devs, Camunda 7 / Flowable users | A self-hosted, PostgreSQL-only engine that imports your Camunda 7 BPMN and adds governed AI | r/java, r/SpringBoot, JUGs, Baeldung/Java Weekly, Devoxx |
-| AI / agent engineers | Guardrails that live in the engine, not the prompt | r/LocalLLaMA, r/AI_Agents, AI Engineer meetups, HN |
+| AI / agent engineers | Guardrails that live in the engine, not the prompt — and agents that improve only through replayed, approved, reversible changes | r/LocalLLaMA, r/AI_Agents, AI Engineer meetups, HN |
 | Platform / DevOps, self-hosters | One command, Docker only, your infra, no licence server | r/selfhosted, selfh.st, awesome-selfhosted |
 | Architects in regulated industries | Audit trail of every model call, human approval, sovereignty | LinkedIn, banking/insurance tech meetups |
 | African tech ecosystem | Sovereign, self-hosted AI built by an African engineer **[verify framing with maintainer]** | GDG, DevFest, ALX/Andela communities |
 
 ## Show HN
 
-**Title (≤ 80 chars):**
-`Show HN: Abada – self-hosted runtime where AI agents advise and humans approve`
+**Title (≤ 80 chars), pick one:**
+- `Show HN: Abada – self-hosted runtime where AI agents advise and humans approve`
+- `Show HN: Abada 1.1 – AI business processes that improve only with your approval`
 
 **Body:**
 
@@ -58,7 +86,10 @@ answer is allowed to change, who approves it, or what the auditor sees afterward
 > - agents can use tools from your MCP servers under read / write / approval-required
 >   policies; a person approves each risky call with its exact arguments, and a crash
 >   never blindly repeats a write;
-> - conditions and decision tables are sandboxed CEL; nothing about routing is guessed.
+> - conditions and decision tables are sandboxed CEL; nothing about routing is guessed;
+> - when people keep overruling an agent, the engine notices, proposes a small change,
+>   lets you replay it on recent real cases first, and only applies it as a new version
+>   after a person approves — with one-click rollback.
 >
 > Processes are written in YAML (we call it APL) so they can be reviewed in a pull request;
 > BPMN 2.0 and Camunda 7 definitions can be imported.
@@ -66,9 +97,10 @@ answer is allowed to change, who approves it, or what the auditor sees afterward
 > Try it with Docker: `curl -fsSL https://install.abadaplatform.com/install.sh | bash`
 > (or clone the repo and run `./release/abada-platform up dev`).
 >
-> It is AGPL-3.0 with no enterprise edition; the worker SDK is Apache-2.0. It is a release
-> candidate: the certified topology is self-hosted Compose with one or more engines on
-> PostgreSQL, and there has been no independent security review yet.
+> It is AGPL-3.0 with no enterprise edition; the worker SDK is Apache-2.0. 1.1.0 just
+> shipped; it is still an evaluation release: the certified topology is self-hosted Compose
+> with one or more engines on PostgreSQL, there has been no independent security review
+> yet, and a replay does not run tools — it shows where the path would have differed.
 >
 > I would love feedback on the APL format and on the agent governance model — what would
 > you need before letting an agent touch production data?
@@ -95,18 +127,20 @@ self-promotion rule first, and be a participant there before and after.
 
 ## Product Hunt
 
-- Name: Abada · Tagline: "Governed AI business processes on your own infrastructure"
+- Name: Abada · Tagline: "AI business processes that improve only with your approval"
 - Gallery: showcase GIF, Studio designer, approval task, audit trail, APL YAML.
 - First comment: the "why" paragraph of the Show HN post.
 
 ## Newsletter pitch (email or submission form)
 
-> Subject: Open-source runtime for governed AI business processes (self-hosted, Java)
+> Subject: Abada 1.1.0 — open-source runtime for governed AI business processes (self-hosted, Java)
 >
 > Hi <name>, Abada is an AGPL, self-hosted process engine where AI agents advise, rules
 > decide and humans approve. The engine validates every model answer against a schema and
 > confidence threshold before it can change process state, and agents' MCP tool calls run
-> under approval policies. Java 21 / Spring Boot / PostgreSQL; BPMN and Camunda 7 import.
+> under approval policies. New in 1.1.0: when people keep overruling an agent, Abada
+> proposes a change, replays it on recent real cases, and applies it only after approval,
+> with one-click rollback. Java 21 / Spring Boot / PostgreSQL; BPMN and Camunda 7 import.
 > Might fit <newsletter section>. Repo: https://github.com/bashizip/abada-platform —
 > 2-minute install: https://docs.abadaplatform.com/user/quickstart/ . Thanks, Patrick
 
@@ -121,7 +155,9 @@ Changelog News, TLDR (AI / DevOps), Self-Host Weekly (selfh.st), DevOps'ish, AI 
 | Why not Temporal? | Temporal is a durable code-execution platform; Abada is a process runtime with human tasks, BPMN import, decision tables and an engine-enforced contract for AI output. Different layer — see `comparison-draft.md`. |
 | Why not n8n / Zapier? | Those are integration automation tools. Abada targets processes that need audit, human approval and transactional state in your own PostgreSQL. |
 | Why not just LangGraph? | LangGraph orchestrates the model; Abada decides what the model's answer is allowed to change, persists the process durably and puts people in the loop. They can be combined: a LangGraph agent can be an external worker. **[verify example exists before saying so]** |
-| Is it production ready? | It is a release candidate. Certified: self-hosted Docker Compose, one or more engines on PostgreSQL. Not yet: public-cloud certification, independent security review. |
+| Is it production ready? | 1.1.0 is an evaluation release. Certified: self-hosted Docker Compose, one or more engines on PostgreSQL. Not yet: public-cloud certification, independent security review. A [pilot runbook](../operations/pilot-runbook.md) exists for teams trying it on real processes. |
+| Does the AI change my process by itself? | No. Insight only proposes; a person approves (after a replay if policy requires it), the change becomes a new immutable version, running instances keep their version, and rollback is one click. |
+| What does a replay actually run? | The proposed process, in memory, on the newest finished cases: one model call per agent step, reviewer steps answered from what the original reviewer decided. Tools, called processes, timers and messages are not run. It has a bounded size and an optional budget. |
 | Single maintainer? | Yes today. That is why contributors are wanted; the test suite, gate reports and AGENTS.md exist so others can contribute safely. |
 | Which models? | Gemini, OpenAI, Anthropic, DeepSeek, OpenRouter or any OpenAI-compatible gateway. |
 | Resource needs? | The full dev stack (8 containers incl. Keycloak and two PostgreSQL) uses about 1 GB of RAM at idle and well under 0.1 CPU core; the engine is ~560 MB of that. Images take about 2.4 GB of disk. Give Docker at least 4 GB. Measured on Apple silicon — see *Measured footprint*. |
