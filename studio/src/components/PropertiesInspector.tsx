@@ -66,7 +66,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
   if (!selectedNode) {
     return (
       <TooltipProvider delayDuration={0}>
-        <aside className="w-80 bg-[#25201D] border-l border-[#3A322E] flex flex-col h-full z-10 shrink-0 p-4 space-y-5 overflow-y-auto">
+        <aside className="w-full min-w-0 bg-[#25201D] border-l border-[#3A322E] flex flex-col h-full z-10 p-4 space-y-5 overflow-y-auto">
         <div className="flex items-center space-x-2 text-[#F4A261]">
           <Sliders className="w-4 h-4" />
           <h2 className="font-bold text-sm text-[#EAE3D9] tracking-wide">Properties Inspector</h2>
@@ -286,7 +286,7 @@ export const PropertiesInspector: React.FC<PropertiesInspectorProps> = ({
 
   return (
     <TooltipProvider delayDuration={0}>
-    <aside className="w-80 bg-[#25201D] border-l border-[#3A322E] flex flex-col h-full z-10 shrink-0 overflow-y-auto">
+    <aside className="w-full min-w-0 bg-[#25201D] border-l border-[#3A322E] flex flex-col h-full z-10 overflow-y-auto">
       {/* Header */}
       <div className="p-4 border-b border-[#3A322E] bg-[#1A1614]/60 sticky top-0 z-10 backdrop-blur-md flex items-center justify-between">
         <div className="flex items-center space-x-2">
