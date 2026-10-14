@@ -1,5 +1,7 @@
 import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react';
 import { AlertCircle, CheckCircle, Info, X, AlertTriangle } from 'lucide-react';
+import type { Emphasis, SoundName } from 'cuelume';
+import { playCue } from '@/lib/sound';
 
 export type ToastType = 'info' | 'success' | 'warning' | 'error';
 
@@ -10,8 +12,21 @@ export interface ToastMessage {
   message?: string;
 }
 
+/** The cue a toast plays for what it reports. Routine toasts stay subtle. */
+const TOAST_CUES: Record<ToastType, SoundName> = {
+  info: 'ready',
+  success: 'success',
+  warning: 'warning',
+  error: 'error',
+};
+
+export interface ToastOptions {
+  /** How much the reported outcome matters; `strong` for deploys and publishes. */
+  emphasis?: Emphasis;
+}
+
 interface ToastContextValue {
-  showToast: (type: ToastType, title: string, message?: string) => void;
+  showToast: (type: ToastType, title: string, message?: string, options?: ToastOptions) => void;
   removeToast: (id: string) => void;
 }
 
@@ -20,7 +35,8 @@ const ToastContext = createContext<ToastContextValue | undefined>(undefined);
 export const ToastProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
-  const showToast = useCallback((type: ToastType, title: string, message?: string) => {
+  const showToast = useCallback((type: ToastType, title: string, message?: string, options?: ToastOptions) => {
+    playCue(TOAST_CUES[type], { emphasis: options?.emphasis ?? 'subtle' });
     const id = `toast-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     setToasts((prev) => [...prev, { id, type, title, message }]);
     setTimeout(() => {
@@ -61,6 +77,8 @@ export const ToastProvider: React.FC<{ children: ReactNode }> = ({ children }) =
             </div>
             <button
               type="button"
+              data-cuelume-close
+              data-cuelume-emphasis="subtle"
               onClick={() => removeToast(toast.id)}
               className="text-[#A89F91] hover:text-[#EAE3D9] transition-colors p-0.5"
             >

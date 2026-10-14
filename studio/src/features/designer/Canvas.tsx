@@ -44,6 +44,7 @@ import { edgeKindOf, outcomeSlots, parallelLanes } from '@/lib/layout/edgeGeomet
 import { type Alignment, alignTo } from '@/lib/layout/alignment';
 import type { LayoutMode } from '@/lib/layout/elkLayout';
 import { savePreferredLayout, hasSavedLayout } from '@/lib/run/layoutPrefs';
+import { playCue } from '@/lib/sound';
 import type { NodeRunStatus } from '@/lib/run/liveRun';
 import { WorkflowNode, WorkflowEdge, EventSubtype, GatewaySubtype } from '@/types';
 import { analyzeLoops } from '@/lib/apl/loopAnalysis';
@@ -225,6 +226,7 @@ const CanvasInner: React.FC<CanvasProps> = ({
     if (source && (source.type === 'agent' || source.type === 'engine-task' || source.type === 'human'
       || source.type === 'call-process')) {
       setPendingConnect({ source: connection.source, target: connection.target });
+      playCue('open', { emphasis: 'subtle' });
       return;
     }
     onConnectNodes(connection.source, connection.target);
@@ -238,13 +240,18 @@ const CanvasInner: React.FC<CanvasProps> = ({
   }, []);
 
   const closeMenu = useCallback(() => { setPendingConnect(null); setMenuAt(null); }, []);
+  const cancelMenu = useCallback(() => {
+    playCue('close', { emphasis: 'subtle' });
+    closeMenu();
+  }, [closeMenu]);
 
   const onEdgeClick = useCallback((_: unknown, edge: Edge) => {
     if (readOnly) return;
+    if (selectedEdgeId !== edge.id) playCue('select', { emphasis: 'subtle' });
     setSelectedEdgeId(edge.id);
     onSelectNode(null);
     wrapperRef.current?.focus({ preventScroll: true });
-  }, [readOnly, onSelectNode]);
+  }, [readOnly, onSelectNode, selectedEdgeId]);
 
   const onNodeDrag = useCallback((_: unknown, node: Node) => {
     const next = alignTo(layout.displayNodes, node.id, node.position);
@@ -255,6 +262,7 @@ const CanvasInner: React.FC<CanvasProps> = ({
     setGuides(null);
     if (readOnly) return;
     const { snapped } = alignTo(layout.displayNodes, node.id, node.position);
+    playCue('tap', { emphasis: 'subtle' });
     onNodeMove(node.id, Math.round(snapped.x), Math.round(snapped.y));
   }, [onNodeMove, readOnly, layout.displayNodes]);
 
@@ -299,10 +307,11 @@ const CanvasInner: React.FC<CanvasProps> = ({
   }, [onDeleteNode, readOnly]);
 
   const onNodeClick = useCallback((_: unknown, node: Node) => {
+    if (!readOnly && node.id !== selectedNodeId) playCue('select', { emphasis: 'subtle' });
     setSelectedEdgeId(null);
     onSelectNode(node.id);
     focusCanvas();
-  }, [onSelectNode, focusCanvas]);
+  }, [onSelectNode, focusCanvas, readOnly, selectedNodeId]);
 
   const onPaneClick = useCallback(() => {
     setSelectedEdgeId(null);
@@ -328,7 +337,7 @@ const CanvasInner: React.FC<CanvasProps> = ({
             target={target}
             x={menuAt.x}
             y={menuAt.y}
-            onCancel={closeMenu}
+            onCancel={cancelMenu}
             onChoose={(route) => {
               onConnectNodes(source.id, target.id, route);
               closeMenu();

@@ -1,6 +1,7 @@
 import React from 'react';
 import { LogIn } from 'lucide-react';
 import { keycloak } from '@/auth/keycloakClient';
+import { SoundToggle } from '@/components/SoundToggle';
 
 /**
  * Full-screen entry point shown before the Keycloak session exists. The
@@ -9,7 +10,8 @@ import { keycloak } from '@/auth/keycloakClient';
  * an empty canvas.
  */
 export const SignInGate: React.FC = () => (
-  <div className="flex flex-col items-center justify-center h-screen w-screen bg-[#1A1614] text-[#EAE3D9]">
+  <div className="relative flex flex-col items-center justify-center h-screen w-screen bg-[#1A1614] text-[#EAE3D9]">
+    <SoundToggle className="absolute top-4 right-4" />
     <div className="flex items-center gap-3 mb-8">
       <img src="/abada-app-icon.svg" alt="" className="w-12 h-12 rounded-[11px] glow-amethyst-subtle" />
       <div>
@@ -25,6 +27,7 @@ export const SignInGate: React.FC = () => (
         reach your projects, processes, forms and workflows.
       </p>
       <button type="button"
+        data-cuelume-tap
         onClick={() => keycloak.login({ redirectUri: window.location.origin })}
         className="mx-auto flex items-center gap-2 px-6 py-2.5 rounded-xl text-xs font-semibold bg-[#9D4EDD] hover:bg-[#b56ef2] text-white shadow-warm-md transition-colors">
         <LogIn className="w-4 h-4" />

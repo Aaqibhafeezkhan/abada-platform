@@ -19,6 +19,7 @@
     "@radix-ui/react-tooltip": "^1.2.16",
     "@tailwindcss/vite": "^4.3.3",
     "@xyflow/react": "^12.11.2",
+    "cuelume": "0.2.8",
     "elkjs": "^0.12.0",
     "fast-xml-parser": "^5.10.1",
     "keycloak-js": "^26.2.4",

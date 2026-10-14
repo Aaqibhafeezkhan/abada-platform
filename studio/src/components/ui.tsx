@@ -59,6 +59,8 @@ export const IconButton: React.FC<IconButtonProps> = ({
       type="button"
       aria-label={label}
       title=""
+      data-cuelume-tap
+      data-cuelume-emphasis="subtle"
       onClick={onClick}
       disabled={disabled}
       className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border transition-all ${
