@@ -37,8 +37,6 @@ flow:
       prompt: |
         Extract {income, creditScore, requestedAmount} from the application payload.
         Return strict JSON only, keyed exactly as requested.
-      tools:
-        - Database Query
       confidence_threshold: 85
       next: creditRules
 

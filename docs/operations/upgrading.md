@@ -93,6 +93,33 @@ Upgrade the engine, Studio and the agent worker together. Before the upgrade:
 Events written before V33 have no sequence number and are not replayed by the
 project event stream; webhook delivery is unchanged.
 
+### Upgrading to 1.1.0 (V34–V38, governed improvement)
+
+V34 to V38 add tables and nullable or defaulted columns only; no existing row
+is rewritten:
+
+| Migration | Adds |
+| --- | --- |
+| V34 | `insight_agent_facts`; four new Insight signal types |
+| V35 | `process_definitions.rollback_of`, `deployed_by`, `deploy_comment` |
+| V36 | `process_start_inputs` (start variables kept for replay) |
+| V37 | `replay_runs`, `replay_cases`; `replay_required`, `replay_min_cases` on approval policies |
+| V38 | `for_each_items` |
+
+Upgrade the engine, Studio and the agent worker together. Before the upgrade:
+
+- A tool name without a server (`web_search`) is no longer accepted by new
+  deployments or validation (`ABADA-APL-TOOL-001`). Definitions already
+  deployed are unaffected. Replace the name with `<server>/<tool>` before
+  redeploying such a definition.
+- Replay needs the start variables of past cases. They are recorded from the
+  moment this release runs, under the project's evidence policy; earlier
+  instances cannot be replayed. A project on evidence policy `none` keeps none.
+- `ABADA_ENCRYPTION_KEY` protects the start variables and evidence payloads, as
+  before: keep it with the database backup.
+
+Finished replays are removed after the evidence retention period.
+
 Process definitions are immutable after deployment. Redeploying changed BPMN
 under the same process key creates a new version. New instances use the latest
 version, while existing instances retain their original deployment ID.

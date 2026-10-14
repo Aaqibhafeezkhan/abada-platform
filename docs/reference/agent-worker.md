@@ -19,7 +19,7 @@ tasks with the Java SDK and worker protocol v1.
   result_variable: summary
   output_schema:
     type: object
-  tools: [crm.read]
+  tools: [crm/read]
   confidence_threshold: 80
   temperature: 0.2
   max_tokens: 2048

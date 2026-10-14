@@ -139,7 +139,7 @@ class ReplayRunnerTest {
     @Test
     void agentsWithToolsAreFlaggedBecauseTheirToolsAreNotRun() throws Exception {
         String source = Files.readString(Path.of("src/test/resources/apl/review-tracked.apl.yaml"))
-                .replace("      reviewed_by:", "      tools: [web_search]\n      reviewed_by:");
+                .replace("      reviewed_by:", "      tools: [crm/get_customer]\n      reviewed_by:");
         var result = runner.run(new AplParser().parse(source.getBytes()), Map.of(),
                 new ScriptedAgent().answer(Map.of("draft_result", "v1")), decisions(Map.of()));
         assertThat(result.toolsSkipped()).containsExactly("draft");
