@@ -60,6 +60,18 @@ export default defineConfig({
           ],
         },
         {
+          label: 'Walkthroughs',
+          items: [
+            { label: 'Overview', slug: 'walkthroughs' },
+            { label: 'The Agent Worker, its SDK, tools and MCP', slug: 'walkthroughs/agent-worker-and-sdk' },
+            { label: 'A CRM call and back to the engine', slug: 'walkthroughs/tool-call-round-trip' },
+            { label: 'Many instances at once', slug: 'walkthroughs/concurrency' },
+            { label: 'A refund that needs approval', slug: 'walkthroughs/approval-refund' },
+            { label: 'Delegating to a sub-process', slug: 'walkthroughs/delegation' },
+            { label: 'Writing a third-party worker', slug: 'walkthroughs/third-party-worker' },
+          ],
+        },
+        {
           label: 'Run and govern',
           items: [
             { label: 'Operate running processes', slug: 'user/operations' },
