@@ -205,18 +205,22 @@ only through an engine command that validates it — see
 
 ## Status
 
-The current release is **`1.1.0-rc.2`**, an evaluation release candidate
-([release notes](docs/release-notes/1.1.0-rc.2-release-notes.md),
-[gate report](docs/development/1.1-rc.2-gate-report-2026-10-10.md)): agents that act —
-tools from your MCP servers under read, write and approval-required policies, human
-approval of each risky call, crash-safe writes, bounded and engine-priced cost, routing
-agents, call-process and agent delegation, live instance updates and an agent-step
-inspector in Studio. It builds on `1.1.0-rc.1` (bounded loops, error and timeout routes,
-service levels, model fallback, review decisions). It targets self-hosted Docker Compose
-deployments with one or more engine instances on PostgreSQL.
+The current release is **`1.1.0`**, an evaluation release
+([release notes](docs/release-notes/1.1.0-release-notes.md),
+[gate report](docs/development/1.1-gate-report-2026-10-14.md)): governed improvement. The
+Insight loop notices that people keep overruling an agent, proposes a small change, shows what
+that change would have done on recorded cases before anyone approves it (a policy can require
+it), and one click returns to the previous version; a `for-each` step runs a governed child per
+item of a list, and refinements are applied as validated patches. It builds on `1.1.0-rc.2`
+(agents that act: tools from your MCP servers under read, write and approval-required policies,
+crash-safe writes, bounded and engine-priced cost, routing agents, call-process and agent
+delegation) and `1.1.0-rc.1` (bounded loops, error and timeout routes, service levels, model
+fallback, review decisions). It targets self-hosted Docker Compose deployments with one or more
+engine instances on PostgreSQL.
 
-Next on the [roadmap](docs/development/roadmap.md): governed improvement (`1.1.0`). Public-cloud production certification and an independent security review
-are not yet scheduled; see the [deployment support matrix](docs/reference/deployment-support.md).
+Public-cloud production certification and an independent security review are not yet scheduled;
+see the [deployment support matrix](docs/reference/deployment-support.md) and the
+[roadmap](docs/development/roadmap.md) for what is deferred.
 
 ---
 
