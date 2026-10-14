@@ -82,6 +82,27 @@
   ]
  },
  {
+  "name": "create: identity check routed to an administrator",
+  "mode": "CREATE",
+  "prompt": "scan the id card and retrive the user name and function with ocr, then chek if the user can access the server room, if he's not in devops user list, redirect to the adminstrator for validation, if he is in at list devops list , give him access ,end",
+  "responses": [
+   "version: abada.io/v1\nmetadata:\n  key: {{KEY}}\n  name: {{NAME}}\nflow:\n  entry: start\n  nodes:\n    - id: start\n      type: webhook\n      next: read_id_card\n    - id: read_id_card\n      type: agent\n      model: gemini-3.6-flash\n      prompt: Read the holder's full name and job function from the ID card image.\n      result_variable: badge\n      next: check_devops\n    - id: check_devops\n      type: condition\n      rules:\n        - if: badge.function == \"devops\"\n          then: grant_access\n        - else: true\n          then: admin_validation\n    - id: admin_validation\n      type: human-input\n      description: Validate server-room access for a user outside DevOps\n      assignees: [administrators]\n      outcomes:\n        approve: { next: grant_access }\n        reject: { next: denied }\n    - id: grant_access\n      type: engine-task\n      service: abada:grant-server-room-access\n      next: granted\n    - id: granted\n      type: end\n    - id: denied\n      type: end\n"
+  ],
+  "expectTypes": [
+   "agent",
+   "condition",
+   "human-input",
+   "engine-task"
+  ],
+  "expectIds": [
+   "read_id_card",
+   "check_devops",
+   "admin_validation",
+   "grant_access"
+  ],
+  "attempts": 1
+ },
+ {
   "name": "refine: add a fraud check before approval",
   "mode": "REFINE",
   "prompt": "Add a fraud check agent before the approval",

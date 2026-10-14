@@ -120,11 +120,13 @@ class ProjectEnvelopeIntegrationTest {
     @Test
     void restrictsAplAuthoringToOwnersAndMaintainers() {
         var project = projects.create("authoring", "Authoring", "Native APL generation");
-        var ownerResponse = authoring.generate(project.getId(),
+        // An owner passes the membership check and, with no model configured, gets a typed refusal
+        // rather than a template presented as generated.
+        assertThatThrownBy(() -> authoring.generate(project.getId(),
                 new ProjectAuthoringController.GenerateAplRequest(
-                        "Review invoice risk", "CREATE", null));
-        assertThat(ownerResponse.getBody()).isNotNull();
-        assertThat(ownerResponse.getBody().provider()).isEqualTo("LOCAL_FALLBACK");
+                        "Review invoice risk", "CREATE", null)))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("No AI model is configured");
 
         PrincipalEntity viewer = principal("viewer", "viewer-subject");
         projects.putMember(project.getId(), viewer.getId(), null, Set.of(Role.VIEWER), Set.of(), Set.of());
