@@ -10,8 +10,10 @@ import com.abada.engine.dto.FetchAndLockRequest;
 import com.abada.engine.dto.LockedExternalTask;
 import com.abada.engine.persistence.entity.ProcessInstanceEntity;
 import com.abada.engine.persistence.entity.ProjectResourceEntity;
+import com.abada.engine.persistence.entity.TaskEntity;
 import com.abada.engine.persistence.repository.ProcessInstanceRepository;
 import com.abada.engine.persistence.repository.ProjectResourceRepository;
+import com.abada.engine.persistence.repository.TaskRepository;
 import com.abada.engine.project.ProjectConstants;
 import java.io.IOException;
 import java.io.InputStream;
@@ -39,11 +41,14 @@ import org.testcontainers.junit.jupiter.Testcontainers;
  * deploys into one project with the example tool server, starts and reaches
  * its first step, and the M3 examples carry what the documentation says they
  * do (tool policies and approvers, routes, delegation, a governed child).
+ * The CRM showcase under {@code examples/showcase/crm-leads} runs here too,
+ * through its agent, rules, review form and worker, without the CRM itself.
  */
 @Testcontainers
 class ExampleGalleryTest {
     private static final String PROJECT = ProjectConstants.DEFAULT_PROJECT_ID;
     private static final Path EXAMPLES = Path.of(System.getProperty("user.dir")).getParent().resolve("examples/apl");
+    private static final Path CRM_SHOWCASE = EXAMPLES.resolveSibling("showcase/crm-leads");
 
     @Container
     private static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16-alpine")
@@ -54,7 +59,8 @@ class ExampleGalleryTest {
     @BeforeAll
     static void deployGallery() throws Exception {
         context = startApplication();
-        installToolServer("payments.yaml");
+        installToolServer(EXAMPLES.resolve("tool-servers/payments.yaml"));
+        installToolServer(CRM_SHOWCASE.resolve("tool-servers/crm.yaml"));
         // Children first: call targets and delegates are pinned when the parent is deployed.
         for (String file : List.of("fraud-check.apl.yaml", "refund-payout.apl.yaml", "support-triage.apl.yaml",
                 "refund-agent.apl.yaml", "complaint-reply.apl.yaml", "lead-triage-demo.apl.yaml",
@@ -63,6 +69,9 @@ class ExampleGalleryTest {
             try (InputStream source = Files.newInputStream(EXAMPLES.resolve(file))) {
                 engine().deploy(PROJECT, source);
             }
+        }
+        try (InputStream source = Files.newInputStream(CRM_SHOWCASE.resolve("process/lead-to-opportunity.apl.yaml"))) {
+            engine().deploy(PROJECT, source);
         }
     }
 
@@ -156,23 +165,78 @@ class ExampleGalleryTest {
         assertThat(triage.getDefinition().getReviewOf("triage").accept()).isEqualTo("approve");
     }
 
+    @Test
+    void theCrmShowcaseGoesFromAgentAdviceThroughRulesAndAReviewToTheWorker() {
+        ProcessInstance instance = start("lead_to_opportunity", Map.of("lead", Map.of("company", "MongoDB",
+                "contact_email", "dana@mongodb.com", "message", "400 MacBook Pro this quarter")));
+        LockedExternalTask research = lock(instance.getId(), "research");
+
+        // The agent may read the CRM and write a note, nothing else; the bindings are frozen at deployment.
+        List<ToolBinding> bindings = research.agentWork().toolBindings();
+        assertThat(bindings).extracting(ToolBinding::tool)
+                .containsExactly("find_company", "list_opportunities", "add_note");
+        assertThat(bindings).extracting(ToolBinding::policy)
+                .containsExactly(ToolPolicy.READ, ToolPolicy.READ, ToolPolicy.WRITE);
+        assertThat(bindings.get(2).idempotency()).isEqualTo("key");
+        assertThat(research.agentWork().fallbackModels()).containsExactly("gemini-3.8-flash", "gemini-3.7-flash");
+        assertThat(research.agentWork().limits().maxTurns()).isEqualTo(6);
+
+        externalTasks().complete(research.id(), "gallery-worker", Map.of("research", Map.of("fit_score", 95,
+                "segment", "new_logo", "estimated_amount", 48000, "summary", "Clear need", "_confidence", 90)));
+
+        // The table decided the lane and pre-filled the stage the review form shows.
+        ProcessInstance reviewing = engine().getProcessInstanceById(instance.getId());
+        assertThat(reviewing.getVariables()).containsEntry("lane", "review").containsEntry("deal_stage", "SCREENING");
+        TaskEntity review = openTask(instance.getId(), "sales-review");
+        assertThat(review.getFormKey()).isEqualTo("lead-qualification");
+        assertThat(review.getCandidateGroups()).containsExactly("sales");
+
+        engine().decideTask(review.getId(), "alice", List.of("sales"), "approve", null,
+                Map.of("deal_stage", "PROPOSAL", "deal_amount", 960000));
+        LockedExternalTask create = lock(instance.getId(), "create-opportunity", "crm.create-opportunity");
+        assertThat(create.variables()).containsEntry("deal_stage", "PROPOSAL").containsEntry("deal_amount", 960000);
+        externalTasks().complete(create.id(), "gallery-worker", Map.of("opportunity_id", "opp-1"));
+        assertThat(engine().getProcessInstanceById(instance.getId()).isCompleted()).isTrue();
+
+        // A weak lead never reaches a person.
+        ProcessInstance weak = start("lead_to_opportunity", Map.of("lead", Map.of("company", "Rosie's Bakery",
+                "message", "hi, do you sell computers?")));
+        externalTasks().complete(lock(weak.getId(), "research").id(), "gallery-worker", Map.of("research",
+                Map.of("fit_score", 15, "segment", "new_logo", "estimated_amount", 0, "summary", "Vague",
+                        "_confidence", 85)));
+        ProcessInstance nurtured = engine().getProcessInstanceById(weak.getId());
+        assertThat(nurtured.isCompleted()).isTrue();
+        assertThat(nurtured.getVariables()).containsEntry("lane", "nurture");
+    }
+
     private static ProcessInstance start(String key, Map<String, Object> variables) {
         return engine().startProcess(PROJECT, key, "alice", variables);
     }
 
     private static LockedExternalTask lock(String instanceId, String activityId) {
-        return externalTasks().fetchAndLock(new FetchAndLockRequest("gallery-worker", List.of("abada:agent"),
+        return lock(instanceId, activityId, "abada:agent");
+    }
+
+    private static LockedExternalTask lock(String instanceId, String activityId, String topic) {
+        return externalTasks().fetchAndLock(new FetchAndLockRequest("gallery-worker", List.of(topic),
                         60_000L, 20)).stream()
                 .filter(task -> task.processInstanceId().equals(instanceId))
                 .filter(task -> task.activityId().equals(activityId))
                 .findFirst().orElseThrow(() -> new AssertionError("no " + activityId + " task for " + instanceId));
     }
 
-    private static void installToolServer(String file) throws Exception {
-        byte[] content = Files.readAllBytes(EXAMPLES.resolve("tool-servers").resolve(file));
+    private static TaskEntity openTask(String instanceId, String activityId) {
+        return context.getBean(TaskRepository.class).findAll().stream()
+                .filter(task -> task.getProcessInstanceId().equals(instanceId)
+                        && task.getTaskDefinitionKey().equals(activityId) && task.getEndDate() == null)
+                .findFirst().orElseThrow(() -> new AssertionError("no open " + activityId + " task"));
+    }
+
+    private static void installToolServer(Path file) throws Exception {
+        byte[] content = Files.readAllBytes(file);
         ProjectResourceEntity server = new ProjectResourceEntity();
         server.setProjectId(PROJECT);
-        server.setName(file);
+        server.setName(file.getFileName().toString());
         server.setContentType("application/yaml");
         server.setContent(content);
         server.setSizeBytes(content.length);
@@ -208,6 +272,8 @@ class ExampleGalleryTest {
                         "spring.task.scheduling.enabled=false",
                         "abada.outbox.dispatcher.enabled=false",
                         "abada.security.mode=disabled",
+                        // The CRM showcase's tool server is plain http on the dev network.
+                        "abada.tools.allow-insecure-http=true",
                         "abada.insight.llm.base-url=http://llm.test.invalid/v1",
                         "abada.insight.llm.api-key=test-key",
                         "otel.sdk.disabled=true",

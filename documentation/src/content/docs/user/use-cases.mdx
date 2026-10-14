@@ -1,6 +1,6 @@
 ---
 title: Use cases
-description: Five runnable processes — a reviewed complaint reply, lead triage, KYC onboarding, a refund agent with an approved write, and support triage with routing and delegation — and what each one shows.
+description: Five runnable processes — a reviewed complaint reply, lead triage, KYC onboarding, a refund agent with an approved write, and support triage with routing and delegation — plus an end-to-end showcase with a real CRM, and what each one shows.
 ---
 
 import { Aside, Badge, LinkCard } from '@astrojs/starlight/components';
@@ -21,6 +21,7 @@ explains each capability the cases use.
 | [KYC onboarding](#kyc-onboarding) | extract, screen | decision table | sign-off | deterministic law after AI advice |
 | [Refund agent](#refund-agent) | acts with tools | limits, budget | approves the write | tools, approval, crash safety, cost |
 | [Support triage](#support-triage) | routes, investigates | route veto, payout rule | fraud review | routing agent, delegation, call-process |
+| [CRM showcase](#crm-showcase-lead-to-opportunity) | researches with MCP tools | qualification table | review form | a real CRM, MCP tool server, custom form, external worker |
 
 ## Complaint reply
 
@@ -177,4 +178,57 @@ Files: [`support-triage.apl.yaml`](https://github.com/bashizip/abada-platform/bl
   Child versions are pinned when the parent is deployed, so deploy
   `fraud_check` and `refund_payout` before `support_triage`. The payout child
   waits for a `payments.payout` service worker, like any `engine-task`.
+</Aside>
+
+## CRM showcase: lead to opportunity
+
+**The problem.** Inbound sales leads land in a CRM. Someone has to look each
+one up, decide whether it is worth a salesperson's time, and create the
+opportunity, without an AI writing deals into the CRM on its own.
+
+This one is a complete stack rather than a single file. It runs
+[Twenty](https://twenty.com), an open-source CRM, next to the development
+stack, and one script configures everything.
+
+```mermaid
+flowchart LR
+    W([Inbound lead]) --> R[research<br/>agent + CRM tools]
+    R --> Q[qualify<br/>decision table]
+    Q -- review --> S[sales-review<br/>person, form]
+    Q -- nurture --> N([Nurtured])
+    S -- approve --> C[create-opportunity<br/>crm-worker]
+    S -- reject --> X([Declined])
+    C --> D([Opportunity created])
+    R -. weak or failed .-> S
+```
+
+- **The agent reads the CRM through MCP.** A small MCP server in front of the
+  Twenty API offers three tools: `find_company` and `list_opportunities`
+  (read) and `add_note` (a write, sent with an idempotency key). The agent
+  has no tool to create an opportunity, so it cannot create one.
+- **Rules decide the lane** and propose the pipeline stage. A weak, malformed
+  or failed answer goes to a person instead of deciding anything.
+- **A custom form** opens for the `sales` group, pre-filled with the stage
+  the rules proposed. The reviewer adjusts the stage, the amount and the
+  notes, then approves, or rejects with a comment.
+- **A worker acts.** A single-file Java worker on the Abada SDK creates the
+  opportunity in Twenty and reports its id back. It is idempotent, because
+  delivery is at-least-once.
+
+```bash
+./examples/showcase/crm-leads/showcase.sh up
+./examples/showcase/crm-leads/showcase.sh lead mongodb   # or zendesk, bakery
+```
+
+`ExampleGalleryTest` runs this process too, through the agent, the rules, the
+review and the worker, with the CRM left out.
+
+Files: [`examples/showcase/crm-leads/`](https://github.com/bashizip/abada-platform/tree/dev/examples/showcase/crm-leads),
+starting with its
+[README](https://github.com/bashizip/abada-platform/blob/dev/examples/showcase/crm-leads/README.md).
+
+<Aside type="caution" title="A development showcase">
+  It needs the development stack and an AI provider for Gemini. It uses a
+  plain-http tool server and Twenty's development seed, so it is not a
+  deployment recipe.
 </Aside>

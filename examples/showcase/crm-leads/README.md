@@ -24,6 +24,11 @@ Each step shows one part of the doctrine:
 Everything lives in PostgreSQL: the instance, the agent's journaled model and
 tool calls, the decision, the review and the worker's result.
 
+`ExampleGalleryTest` (engine, PostgreSQL) deploys this process with its tool
+server and runs it through the agent, the rules, the review and the worker,
+with the CRM left out, so the process file always deploys and routes as
+described here.
+
 ## Why Twenty
 
 [Twenty](https://twenty.com) (AGPL-3.0) is an open-source CRM with an official
