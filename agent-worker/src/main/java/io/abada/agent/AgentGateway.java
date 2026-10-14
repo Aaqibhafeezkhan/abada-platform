@@ -1,5 +1,6 @@
 package io.abada.agent;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import io.abada.worker.AgentWorkDescriptor;
 import java.util.List;
 import java.util.Map;
@@ -23,8 +24,17 @@ public interface AgentGateway {
     /** A tool offered to the model: an OpenAI-style function with its JSON Schema parameters. */
     record ToolSpec(String name, String description, Map<String, Object> parameters) {}
 
-    /** A tool call the model requested; {@code arguments} is the raw JSON string it produced. */
-    record ToolCall(String id, String name, String arguments) {}
+    /**
+     * A tool call the model requested; {@code arguments} is the raw JSON string it produced.
+     * {@code extraContent} is the provider's opaque per-call data (Gemini's
+     * {@code extra_content.google.thought_signature}), sent back unchanged with the
+     * call on the next turn; null when the provider sent none.
+     */
+    record ToolCall(String id, String name, String arguments, JsonNode extraContent) {
+        public ToolCall(String id, String name, String arguments) {
+            this(id, name, arguments, null);
+        }
+    }
 
     /** The model's reply: final text, or tool calls to run first; plus token usage. */
     record ChatTurn(String content, List<ToolCall> toolCalls, Integer promptTokens, Integer completionTokens) {

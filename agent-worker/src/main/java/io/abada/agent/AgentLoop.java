@@ -412,8 +412,7 @@ final class AgentLoop {
                 }
                 Map<String, Object> result = new LinkedHashMap<>();
                 result.put("content", reply.content());
-                result.put("toolCalls", reply.toolCalls().stream().map(call -> Map.of("id", call.id(),
-                        "name", call.name(), "arguments", call.arguments())).toList());
+                result.put("toolCalls", reply.toolCalls().stream().map(AgentLoop::journaledCall).toList());
                 journalModel(sequence, "COMPLETED", request, result, null, model, reply.promptTokens(),
                         reply.completionTokens());
                 promptTokens += reply.promptTokens() == null ? 0 : reply.promptTokens();
@@ -437,11 +436,17 @@ final class AgentLoop {
             List<ToolCall> requested = new ArrayList<>();
             if (result != null) {
                 for (JsonNode call : result.path("toolCalls")) {
+                    JsonNode extra = call.path("extraContent");
                     ToolCall toolCall = new ToolCall(call.path("id").asText(), call.path("name").asText(),
-                            call.path("arguments").asText("{}"));
+                            call.path("arguments").asText("{}"), extra.isObject() ? extra : null);
                     requested.add(toolCall);
-                    calls.add(Map.of("id", toolCall.id(), "type", "function",
-                            "function", Map.of("name", toolCall.name(), "arguments", toolCall.arguments())));
+                    Map<String, Object> echoed = new LinkedHashMap<>();
+                    echoed.put("id", toolCall.id());
+                    echoed.put("type", "function");
+                    echoed.put("function", Map.of("name", toolCall.name(), "arguments", toolCall.arguments()));
+                    // Gemini rejects the next turn unless each call's thought signature comes back.
+                    if (toolCall.extraContent() != null) echoed.put("extra_content", toolCall.extraContent());
+                    calls.add(echoed);
                 }
             }
             if (!calls.isEmpty()) assistant.put("tool_calls", calls);
@@ -710,6 +715,19 @@ final class AgentLoop {
     static String delegateFunctionName(AgentDelegate delegate) {
         String name = ("delegate__" + delegate.process()).replaceAll("[^A-Za-z0-9_-]", "_");
         return name.length() > 64 ? name.substring(0, 64) : name;
+    }
+
+    /**
+     * A requested call as journaled. The provider's opaque {@code extraContent} is
+     * kept so a resumed attempt can still send it back with the call.
+     */
+    static Map<String, Object> journaledCall(ToolCall call) {
+        Map<String, Object> journaled = new LinkedHashMap<>();
+        journaled.put("id", call.id());
+        journaled.put("name", call.name());
+        journaled.put("arguments", call.arguments());
+        if (call.extraContent() != null) journaled.put("extraContent", call.extraContent());
+        return journaled;
     }
 
     static String functionName(ToolBinding binding) {
