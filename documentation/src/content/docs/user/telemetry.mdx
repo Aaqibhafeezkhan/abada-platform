@@ -3,7 +3,10 @@ title: Telemetry
 description: Run Abada with telemetry disabled, bundled, or exported externally.
 ---
 
-Telemetry is off by default. Workflow readiness and transactions never depend
+Telemetry is off by default and, when enabled, goes only to a collector you
+run. It has nothing to do with the one anonymous report the installer sends
+when it finishes: see [Privacy and the install report](/user/privacy/).
+Workflow readiness and transactions never depend
 on a collector. OpenTelemetry is optional diagnostics only: it is not the
 Insight Engine's cursor and cannot authorize a proposal (see [The Insight
 Engine](/architecture/insight/)).

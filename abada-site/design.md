@@ -5,7 +5,7 @@ Primary: buyers and design partners in regulated and sovereignty-sensitive organ
 In 30 seconds they must get: the moat (AI-driven processes that run entirely on infrastructure they control — AGPL-3.0 open source, PostgreSQL as the only database, their identity provider, the model endpoint they choose), that the engine governs the AI, that the claims are proven and rerunnable, what the release does not do yet, and how to start a pilot.
 
 ## Moat, in order
-1. Sovereign and open: self-hosted, AGPL-3.0, PostgreSQL-only, telemetry off by default; say exactly what can cross the boundary.
+1. Sovereign and open: self-hosted, AGPL-3.0, PostgreSQL-only, telemetry off by default; say exactly what can cross the boundary (the running platform sends nothing; the installer sends one opt-out report, documented on the privacy page).
 2. Governed by the engine: agents advise, rules decide, humans approve, PostgreSQL remembers.
 3. Proof: recorded release gate and the rerunnable exit demo (`scripts/test/m1-exit-demo`).
 

@@ -26,6 +26,13 @@ Nothing here needs an account with us.
    and evidence payloads cannot be read without it.
 3. Run `./release/abada-platform doctor prod --env-file .env.prod` and fix
    what it reports before starting.
+
+   The `curl | bash` installer sends one anonymous report when it finishes
+   (version, system, outcome; no address, name or path). A partner who wants no
+   contact with us at all can download the archive from the GitHub release and
+   verify its checksum by hand, or set `ABADA_USAGE_PING=0` /
+   `DO_NOT_TRACK=1`. The running platform never contacts us. Details:
+   [Privacy and the install report](https://docs.abadaplatform.com/user/privacy/).
 4. Check `/api/actuator/health`, then sign in to Studio.
 
 ## 2. Model your process

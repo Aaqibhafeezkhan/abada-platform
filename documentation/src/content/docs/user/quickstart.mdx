@@ -16,11 +16,16 @@ mkdir abada-quickstart && cd abada-quickstart
 curl -fsSL https://install.abadaplatform.com/install.sh | bash
 ```
 
-The installer asks for a Gemini API key (hidden input) and checks that it can
-call `gemini-3.6-flash`. You can skip it and add any provider later in
-**Studio → Settings → AI Providers**. The key is written only to the local,
-untracked `.env.dev` (mode `0600`). Automation can pass it as
-`ABADA_LLM_GEMINI_API_KEY`.
+The installer does not ask for anything. To bake in a Gemini API key, pass it as
+`ABADA_LLM_GEMINI_API_KEY` to `bash`; the installer then checks that it can call
+`gemini-3.6-flash` and writes it only to the local, untracked `.env.dev` (mode
+`0600`). Otherwise add any provider later in **Studio → Settings → AI
+Providers**, where keys are stored encrypted.
+
+When it finishes, the installer sends one anonymous report (version, system,
+outcome; your country and city come from the request, and your address is not
+stored). To turn it off, run `curl … | ABADA_USAGE_PING=0 bash` or set
+`DO_NOT_TRACK=1`. See [Privacy and the install report](/user/privacy/).
 
 On Windows (PowerShell):
 

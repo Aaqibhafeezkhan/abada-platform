@@ -19,7 +19,11 @@ const CONTROLS = [
   },
   {
     what: "Telemetry",
-    how: "Off by default. When enabled, it goes to your own collector.",
+    how: "Off by default. When enabled, it goes to your own collector. The running platform never contacts us.",
+  },
+  {
+    what: "Installer report",
+    how: "The Linux/macOS installer sends one anonymous report when it finishes (version, system, outcome). Opt out with ABADA_USAGE_PING=0 or DO_NOT_TRACK=1.",
   },
   {
     what: "Operations",
@@ -48,7 +52,7 @@ export function Boundary() {
       <SectionHead
         eyebrow="Sovereignty"
         title="The whole platform runs inside your walls."
-        lead="No vendor cloud, no licence server, no external account."
+        lead="No vendor cloud, no licence server, no external account. The running platform never contacts us."
       />
 
       <div className="mt-12 grid gap-8 lg:grid-cols-12">
