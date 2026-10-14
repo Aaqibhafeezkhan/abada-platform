@@ -14,6 +14,13 @@ primary button. The palette mirrors `studio/src/index.css`.
 - `login/resources/css/abada.css` holds all styling; it loads after
   Keycloak's `login.css`.
 - `login/messages/messages_en.properties` holds the page title and tagline.
+- `login/resources/js/sounds.js` adds the same interaction sounds as Studio
+  (button taps, keystrokes in non-password fields, link navigation). It uses
+  `resources/js/vendor/cuelume/`, the unmodified built JavaScript of
+  [cuelume](https://www.npmjs.com/package/cuelume) 0.2.8 (MIT, see its
+  `LICENSE`), which synthesizes sound with Web Audio and makes no network
+  requests. Re-copy it from `studio/node_modules/cuelume/dist` when Studio's
+  pinned version changes.
 
 `compose.dev.yaml` mounts the theme at `/opt/keycloak/themes/abada`, and
 `realm-dev.json` selects it with `"loginTheme": "abada"`. `start-dev` disables
