@@ -106,6 +106,35 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
         run: ./scripts/release/upload-bundle-to-r2.sh "$VERSION"
 
+      # Install events (install/README.md, "Install events") are stored in a D1 database. Until the owner has
+      # created it and put its id in install/worker/wrangler.toml, the Worker is deployed without the binding:
+      # it then records nothing and serves everything as before, so a release is never blocked by this.
+      - name: Prepare install-event storage
+        id: usage_storage
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+        run: |
+          cd install/worker
+          if grep -q 'REPLACE_WITH_ID_FROM_wrangler_d1_create' wrangler.toml; then
+            echo "::warning::Install events are not being recorded: create the D1 database 'abada-usage' and put its id in install/worker/wrangler.toml (see install/README.md)."
+            python3 - <<'PY'
+          import re
+          text = open("wrangler.toml").read()
+          text = re.sub(r"\[\[d1_databases\]\].*?migrations_dir = \"migrations\"\n", "", text, flags=re.S)
+          open("wrangler.toml", "w").write(text)
+          PY
+            echo "recording=off" >>"$GITHUB_OUTPUT"
+          else
+            if npx --yes wrangler@4.78.0 d1 migrations apply abada-usage --remote; then
+              echo "recording=on" >>"$GITHUB_OUTPUT"
+            else
+              echo "::warning::Could not apply the install-event migration (does CF_API_TOKEN have D1 edit permission?). The Worker is deployed anyway and records nothing until it is applied."
+              echo "recording=unknown" >>"$GITHUB_OUTPUT"
+            fi
+          fi
+
       - name: Deploy public installer Worker
         uses: cloudflare/wrangler-action@v3.15.0
         with:
@@ -165,11 +194,25 @@ jobs:
             fi
           }
           trap cleanup EXIT
+          # The report is switched off here: a CI install is not a user install. The route itself is checked below.
           curl -fsSL https://install.abadaplatform.com/install.sh | \
-            env ABADA_VERSION="$VERSION" ABADA_INSTALL_DIR="$install_dir" \
+            env ABADA_VERSION="$VERSION" ABADA_INSTALL_DIR="$install_dir" ABADA_USAGE_PING=0 \
               ABADA_AGENT_LLM_API_KEY="$GEMINI_API_KEY" bash
           curl -fsS --retry 10 --retry-all-errors --retry-delay 2 \
             http://api.localhost/api/v1/info >/dev/null
+
+      - name: Check the install-event route
+        shell: bash
+        run: |
+          # One deliberate smoke event, marked as CI, proves the route is live and validates what the installer sends.
+          status="$(curl -sS -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type: application/json' \
+            --data "{\"event\":\"install_succeeded\",\"version\":\"$VERSION\",\"os\":\"Linux\",\"arch\":\"x86_64\",\"profile\":\"dev\",\"duration_s\":0,\"llm_key_provided\":false,\"ci\":true}" \
+            https://install.abadaplatform.com/v1/install-event)"
+          [[ "$status" == "204" ]] || { echo "::error::The install-event route answered $status, expected 204"; exit 1; }
+          # Anything that is not on the list is refused.
+          status="$(curl -sS -o /dev/null -w '%{http_code}' -X POST --data '{"event":"install_succeeded","hostname":"x"}' \
+            https://install.abadaplatform.com/v1/install-event)"
+          [[ "$status" == "400" ]] || { echo "::error::The install-event route accepted an unlisted field ($status)"; exit 1; }
 
       # Promotion is intentionally last. A failed bundle, private image, or
       # failed clean-machine startup cannot become the installer's default.

@@ -26,8 +26,10 @@ is allowed to change.
   <a href="docs/assets/studio-showcase.mp4?raw=true">Download MP4</a></sub>
 </p>
 
-- **Sovereign.** No vendor cloud, no licence server, telemetry off by default. Models can
-  run inside your network.
+- **Sovereign.** No vendor cloud, no licence server, telemetry off by default; the running
+  platform never contacts us. Models can run inside your network. The Linux/macOS installer
+  sends one anonymous report when it finishes, which you can switch off
+  ([what it sends](https://docs.abadaplatform.com/user/privacy/)).
 - **Open.** AGPL-3.0, with no enterprise edition. The worker SDK is Apache-2.0.
 - **Governed.** Model output is validated by the engine against a declared schema and
   confidence threshold; invalid or low-confidence answers go to a person. Rules are

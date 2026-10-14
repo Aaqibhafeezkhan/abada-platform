@@ -48,7 +48,7 @@ answer is allowed to change, who approves it, or what the auditor sees afterward
 | Turns, tokens and spend are bounded and priced by the engine | same |
 | Rules are sandboxed CEL, rejected at deployment when unsafe | `docs/reference/bpmn-support.md` |
 | Processes are YAML (APL) you review in a pull request; BPMN 2.0 and Camunda 7 definitions import | `docs/reference/apl-specification.md`, docs "BPMN import and compatibility" |
-| Self-hosted: your PostgreSQL, your OIDC, your model endpoint (any OpenAI-compatible gateway), telemetry off by default | `docs/reference/agent-worker.md`, README |
+| Self-hosted: your PostgreSQL, your OIDC, your model endpoint (any OpenAI-compatible gateway), telemetry off by default, and the running platform never contacts us (the Linux/macOS installer sends one anonymous, opt-out report: say so, link the privacy page) | `docs/reference/agent-worker.md`, README, `documentation/src/content/docs/user/privacy.mdx` |
 | Insight reports override rate, calibration gap, confidence drift and cost per case for reviewed agents | `docs/release-notes/1.1.0-release-notes.md` (E14) |
 | A proposed change can be replayed on recent real cases before approval; a policy can require it | same (E15) — tools are not run during a replay |
 | Version history, source diff and one-click rollback; running instances keep their version | same (E16) |
@@ -115,7 +115,7 @@ defensiveness. Have the FAQ below open.
 
 - **r/selfhosted** — title: "Abada: self-hosted process engine for AI workflows with
   human approval (Docker, PostgreSQL, OIDC)". Lead with the install command, screenshots,
-  resource needs (≈1 GB RAM idle for the whole dev stack, ≈2.4 GB of images — see *Measured footprint*), and "telemetry off by default".
+  resource needs (≈1 GB RAM idle for the whole dev stack, ≈2.4 GB of images — see *Measured footprint*), and "telemetry off by default" — plus the honest line that the installer sends one anonymous report you can opt out of (`ABADA_USAGE_PING=0` / `DO_NOT_TRACK=1`), with a link to the privacy page. This audience will read `install.sh`; say it before they find it.
 - **r/java / r/SpringBoot** — lead with the engineering: transactional outbox, durable
   leases, PostgreSQL Testcontainers as the correctness reference, Camunda 7 import.
   Link the cornerstone post, not the homepage.
