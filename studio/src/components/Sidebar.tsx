@@ -268,7 +268,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   ];
 
   return (
-    <aside className="w-64 bg-[#25201D] border-r border-[#3A322E] flex flex-col h-full z-10 shrink-0">
+    <aside className="w-full min-w-0 bg-[#25201D] border-r border-[#3A322E] flex flex-col h-full z-10">
       {/* Navigation Tabs */}
       <div className="flex items-center border-b border-[#3A322E] bg-[#1A1614]/60 p-1">
         <button

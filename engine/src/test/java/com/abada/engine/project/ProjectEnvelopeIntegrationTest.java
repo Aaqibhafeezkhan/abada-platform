@@ -120,13 +120,14 @@ class ProjectEnvelopeIntegrationTest {
     @Test
     void restrictsAplAuthoringToOwnersAndMaintainers() {
         var project = projects.create("authoring", "Authoring", "Native APL generation");
-        // An owner passes the membership check and, with no model configured, gets a typed refusal
-        // rather than a template presented as generated.
+        // An owner passes the membership check. With no reachable model here the answer is a typed 409
+        // refusal, never a template presented as generated. Whether a provider is configured depends on
+        // the shared test context, so either refusal counts.
         assertThatThrownBy(() -> authoring.generate(project.getId(),
                 new ProjectAuthoringController.GenerateAplRequest(
                         "Review invoice risk", "CREATE", null)))
-                .isInstanceOf(ApiException.class)
-                .hasMessageContaining("No AI model is configured");
+                .isInstanceOfSatisfying(ApiException.class,
+                        refusal -> assertThat(refusal.status()).isEqualTo(org.springframework.http.HttpStatus.CONFLICT));
 
         PrincipalEntity viewer = principal("viewer", "viewer-subject");
         projects.putMember(project.getId(), viewer.getId(), null, Set.of(Role.VIEWER), Set.of(), Set.of());
