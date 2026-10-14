@@ -1,0 +1,346 @@
+---
+title: Writing a third-party worker
+description: Build a payments worker with the Java worker SDK — register, fetch only what you can run, keep the lease alive, and report completion, a business error or a technical failure with the right idempotency keys.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+A third-party worker is your own program — payments, ERP, e-mail — that takes
+tasks from Abada, does the work and reports back. This walkthrough builds the
+payments worker that runs the `pay` node of
+[`refund_payout`](/walkthroughs/delegation/).
+
+## 1. The process side: an `engine-task` node
+
+```yaml
+- id: pay
+  type: engine-task
+  service: payments.payout          # the topic your worker serves
+  on_error:
+    - { code: CARD_EXPIRED, then: ask_new_card }   # a known business error
+    - { then: manual_payout }                      # everything else, including exhausted retries
+  next: done
+```
+
+When a token reaches `pay`, the engine creates an external task on
+`payments.payout` and waits for a worker to claim it.
+
+## 2. Prerequisites
+
+**The SDK.** `io.abada:abada-worker-client` is not published to Maven Central
+yet; install it into your local repository from a checkout:
+
+```bash
+engine/mvnw -f sdk/java/pom.xml -DskipTests install
+```
+
+```xml
+<dependency>
+  <groupId>io.abada</groupId>
+  <artifactId>abada-worker-client</artifactId>
+  <version>1.1.0</version>
+</dependency>
+```
+
+The SDK is Apache 2.0, so a worker built on it carries no AGPL obligations.
+
+**An identity.** Create a confidential OIDC client (client credentials) whose
+service account holds the Abada worker role (the `abada-worker` group in the
+bundled Keycloak). A global worker registers its topics once with
+`PUT /v1/workers/me`; a worker that polls with an explicit `projectId` instead
+needs an Owner-created binding for that project and topic. A worker
+credential can never decide a human task.
+
+## 3. The code
+
+### Tokens
+
+The SDK takes a `Supplier<String>` that returns a valid bearer token. A minimal
+client-credentials supplier with caching:
+
+```java
+package com.acme.payments;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.net.URI;
+import java.net.URLEncoder;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
+import java.time.Instant;
+
+/** OIDC client-credentials tokens, cached until shortly before expiry. */
+final class OidcTokens {
+    private final HttpClient http = HttpClient.newHttpClient();
+    private final ObjectMapper json = new ObjectMapper();
+    private final URI tokenUrl;
+    private final String clientId;
+    private final String clientSecret;
+    private String token;
+    private Instant expiresAt = Instant.EPOCH;
+
+    OidcTokens(URI tokenUrl, String clientId, String clientSecret) {
+        this.tokenUrl = tokenUrl;
+        this.clientId = clientId;
+        this.clientSecret = clientSecret;
+    }
+
+    synchronized String get() {
+        if (Instant.now().isBefore(expiresAt.minusSeconds(30))) return token;
+        try {
+            String form = "grant_type=client_credentials&client_id=" + encode(clientId)
+                    + "&client_secret=" + encode(clientSecret);
+            HttpResponse<String> response = http.send(HttpRequest.newBuilder(tokenUrl)
+                    .header("Content-Type", "application/x-www-form-urlencoded")
+                    .POST(HttpRequest.BodyPublishers.ofString(form)).build(),
+                    HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() != 200) {
+                throw new IllegalStateException("Token endpoint answered " + response.statusCode());
+            }
+            JsonNode body = json.readTree(response.body());
+            token = body.path("access_token").asText();
+            expiresAt = Instant.now().plusSeconds(body.path("expires_in").asLong(60));
+            return token;
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Interrupted while requesting a token", interrupted);
+        } catch (java.io.IOException failure) {
+            throw new IllegalStateException("Token endpoint unreachable", failure);
+        }
+    }
+
+    private static String encode(String value) {
+        return URLEncoder.encode(value, StandardCharsets.UTF_8);
+    }
+}
+```
+
+### Your payment integration
+
+The worker needs one thing from your payment code: a payout that a repeated
+operation key turns into a no-op.
+
+```java
+package com.acme.payments;
+
+import java.math.BigDecimal;
+
+/** Your payment integration. The operation key must make a repeated payout a no-op. */
+interface PaymentProvider {
+    Payout payout(String orderId, BigDecimal amount, String currency, String operationKey) throws Exception;
+
+    record Payout(String id) {}
+
+    /** A business outcome the process has a route for. */
+    final class CardExpiredException extends Exception {
+        CardExpiredException(String message) {
+            super(message);
+        }
+    }
+}
+```
+
+### The worker
+
+```java
+package com.acme.payments;
+
+import io.abada.worker.AbadaWorkerClient;
+import io.abada.worker.LockedExternalTask;
+import io.abada.worker.RequestOptions;
+import io.abada.worker.WorkerProtocolException;
+import java.math.BigDecimal;
+import java.net.InetAddress;
+import java.net.URI;
+import java.time.Duration;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+
+public final class PayoutWorker {
+    static final String TOPIC = "payments.payout";
+    static final Duration LOCK = Duration.ofSeconds(60);
+
+    private final AbadaWorkerClient client;
+    private final String workerId;
+    private final PaymentProvider payments;
+    private final Semaphore slots = new Semaphore(8);
+    private final ExecutorService pool = Executors.newVirtualThreadPerTaskExecutor();
+    private final ScheduledExecutorService heartbeats = Executors.newSingleThreadScheduledExecutor();
+
+    public static void main(String[] args) throws Exception {
+        var tokens = new OidcTokens(URI.create(env("OIDC_TOKEN_URL")), env("OIDC_CLIENT_ID"),
+                env("OIDC_CLIENT_SECRET"));
+        // The engine URL includes the /api context path, for example https://abada.acme.com/api
+        var client = new AbadaWorkerClient(URI.create(env("ABADA_ENGINE_URL")), tokens::get);
+        client.registerCapabilities(List.of(TOPIC), List.of());
+        String workerId = "payout-" + InetAddress.getLocalHost().getHostName();
+        new PayoutWorker(client, workerId, yourPaymentProvider()).run();
+    }
+
+    PayoutWorker(AbadaWorkerClient client, String workerId, PaymentProvider payments) {
+        this.client = client;
+        this.workerId = workerId;
+        this.payments = payments;
+    }
+
+    /** Fetch only as many tasks as there are free slots. */
+    void run() throws InterruptedException {
+        while (!Thread.currentThread().isInterrupted()) {
+            int free = slots.drainPermits();
+            List<LockedExternalTask> tasks = List.of();
+            try {
+                if (free > 0) {
+                    tasks = client.fetchAndLock(workerId, List.of(TOPIC), LOCK, free, RequestOptions.defaults());
+                }
+            } catch (RuntimeException failure) {
+                System.err.println("fetch_failed " + failure.getMessage());
+            } finally {
+                slots.release(free - tasks.size());
+            }
+            for (LockedExternalTask task : tasks) {
+                pool.submit(() -> {
+                    try {
+                        handle(task);
+                    } finally {
+                        slots.release();
+                    }
+                });
+            }
+            if (tasks.isEmpty()) Thread.sleep(1_000);
+        }
+    }
+
+    /** One task: pay, then tell the engine how it went. */
+    void handle(LockedExternalTask task) {
+        AtomicBoolean lockLost = new AtomicBoolean(false);
+        long every = LOCK.toMillis() / 3;
+        ScheduledFuture<?> beat = heartbeats.scheduleAtFixedRate(() -> {
+            try {
+                client.extendLock(task.id(), workerId, LOCK, new RequestOptions(null, task.traceParent(), null));
+            } catch (RuntimeException refused) {
+                lockLost.set(true);   // another worker owns the task now
+                throw refused;        // stops this heartbeat
+            }
+        }, every, every, TimeUnit.MILLISECONDS);
+
+        try {
+            Map<String, Object> variables = task.variables();
+            String orderId = (String) variables.get("orderId");
+            BigDecimal amount = new BigDecimal(variables.get("amount").toString());
+            String currency = (String) variables.get("currency");
+
+            // Stable business key: the same on every attempt of this task,
+            // so the payment provider never pays twice.
+            String operationKey = "payout-" + task.id();
+            PaymentProvider.Payout payout = payments.payout(orderId, amount, currency, operationKey);
+
+            beat.cancel(false);
+            if (lockLost.get()) return;
+            report(() -> client.complete(task.id(), workerId, Map.of("payout_id", payout.id()),
+                    options(task, "complete")));
+        } catch (PaymentProvider.CardExpiredException business) {
+            beat.cancel(false);
+            if (lockLost.get()) return;
+            report(() -> client.bpmnError(task.id(), workerId, "CARD_EXPIRED", "The customer's card expired",
+                    Map.of(), options(task, "bpmn-error")));
+        } catch (Exception technical) {
+            beat.cancel(false);
+            if (lockLost.get()) return;
+            int remaining = Math.max(0, (task.retries() == null ? 3 : task.retries()) - 1);
+            report(() -> client.fail(task.id(), workerId, technical.getClass().getSimpleName(),
+                    "Payout failed for task " + task.id(), remaining, Duration.ofSeconds(30),
+                    options(task, "failure")));
+        }
+    }
+
+    /** A 409 CONCURRENT_MODIFICATION is safe to retry once with the same key while the lock is ours. */
+    private void report(Runnable call) {
+        try {
+            call.run();
+        } catch (WorkerProtocolException refused) {
+            if (refused.status() == 409 && "CONCURRENT_MODIFICATION".equals(refused.code())) {
+                call.run();
+                return;
+            }
+            System.err.println("report_failed status=" + refused.status() + " code=" + refused.code());
+        }
+    }
+
+    /** One idempotency key per lease and operation. */
+    static RequestOptions options(LockedExternalTask task, String operation) {
+        long lease = task.lockExpirationTime() == null ? 0 : task.lockExpirationTime().toEpochMilli();
+        return new RequestOptions("payout-" + task.id() + "-" + lease + "-" + operation, task.traceParent(), null);
+    }
+
+    private static String env(String name) {
+        String value = System.getenv(name);
+        if (value == null || value.isBlank()) throw new IllegalStateException(name + " is required");
+        return value;
+    }
+
+    private static PaymentProvider yourPaymentProvider() {
+        return (orderId, amount, currency, operationKey) -> new PaymentProvider.Payout("P-" + orderId);
+    }
+}
+```
+
+`yourPaymentProvider()` stands in for your real integration.
+
+## 4. Which call for which outcome
+
+| What happened | Call | What the engine does |
+| --- | --- | --- |
+| It worked | `complete(..., variables)` | stores `payout_id` and advances the process in one transaction |
+| An expected **business** problem (card expired, unknown customer) | `bpmnError(..., "CARD_EXPIRED", ...)` | follows the matching `on_error` route; no retry, since retrying would not change the answer |
+| A **technical** problem (timeout, 503, network) | `fail(..., retries - 1, delay)` | retries after the delay; at zero retries takes `on_error` (code `WORK_FAILED`) or opens an incident |
+| A final failure that should be routed | `failWithCode(..., "CODE", ...)` | never retried; the `on_error` route catching that code |
+| The work takes a while | `extendLock(...)` every third of the lease | extends the lease so nobody else claims the task |
+
+## 5. Rules of thumb
+
+1. **One `workerId` per running process** (host or pod name). Replicas sharing
+   one cannot be told apart.
+2. **Fetch only what you can run**: `maxTasks` equals your free slots, so work
+   never waits inside a busy worker while another is idle.
+3. **Stop the heartbeat before reporting**, and report nothing when the lease
+   was lost.
+4. **Two kinds of idempotency, not to be confused:**
+   - the **business key** (`payout-<taskId>`) protects *your* side effect and
+     is the same on every attempt, so the customer is never paid twice;
+   - the **report key** (`Idempotency-Key` on `complete` / `fail`) protects the
+     *engine* from the same report sent twice. It names the lease, so a new
+     lease uses fresh keys.
+5. **Never log raw variables, tokens or secrets** — task and activity IDs and
+   counters only.
+6. **Rely on documented fields only.** Protocol v1 only ever adds optional
+   fields and the SDK ignores fields it does not know, so the worker keeps
+   working against newer engines.
+
+## 6. What is guaranteed
+
+- **By the engine:** the process advances once, even if your `complete` is
+  sent twice.
+- **Not by the engine:** that your payout runs once. If the worker crashes
+  after paying but before `complete`, the task comes back — to you or to
+  another worker. External side effects are **at-least-once**; the business key
+  is what prevents a double payout.
+
+<Aside type="note" title="Building your own agent worker">
+  A worker on `abada:agent` receives the `agentWork` descriptor and must then
+  implement the step journal, resumption, tool policies, approvals, delegation
+  and limits described in [the earlier walkthroughs](/walkthroughs/agent-worker-and-sdk/).
+  The first-party worker already does; its `AgentLoop` is the reference. For
+  deterministic work, an `engine-task` worker like this one is the right tool.
+</Aside>
+
+Contract: [external-worker protocol v1](https://github.com/bashizip/abada-platform/blob/dev/docs/reference/external-worker-protocol-v1.md)
+and [API and worker contracts](/developer/contracts/).
