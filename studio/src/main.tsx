@@ -11,8 +11,10 @@ import App from './App.tsx'
 import { initKeycloak } from '@/auth/keycloakClient';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { ToastProvider } from '@/components/ToastContext';
+import { initSound } from '@/lib/sound';
 
 async function renderApp() {
+  initSound();
   try {
     await initKeycloak();
   } catch (error) {

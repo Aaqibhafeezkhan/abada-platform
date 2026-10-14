@@ -40,6 +40,7 @@ class AgentToolLoopEndToEndTest {
     private StubMcpServer crm;
     private HttpServer llm;
     private final AtomicInteger llmCalls = new AtomicInteger();
+    private final List<String> llmRequests = java.util.Collections.synchronizedList(new ArrayList<>());
     private final List<String> script = new ArrayList<>(List.of(
             toolCall("c1", "crm__get_customer", "{\"id\":7}"),
             toolCall("c2", "crm__create_ticket", "{\"subject\":\"refund for Ada\"}"),
@@ -52,7 +53,7 @@ class AgentToolLoopEndToEndTest {
         llm = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         llm.createContext("/v1/chat/completions", exchange -> {
             try (exchange) {
-                exchange.getRequestBody().readAllBytes();
+                llmRequests.add(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
                 int index = llmCalls.getAndIncrement();
                 byte[] body = script.get(Math.min(index, script.size() - 1)).getBytes(StandardCharsets.UTF_8);
                 exchange.getResponseHeaders().add("Content-Type", "application/json");
@@ -93,6 +94,39 @@ class AgentToolLoopEndToEndTest {
         assertEquals(3, llmCalls.get(), "no model turn paid for twice");
         assertEquals(List.of("crm/get_customer", "crm/create_ticket"), engine.metadata.tools().stream()
                 .filter(tool -> tool.contains("/")).toList());
+    }
+
+    @Test
+    void aProvidersThoughtSignatureGoesBackWithItsCallAlsoAfterAResume() throws Exception {
+        // Gemini 3 attaches a thought signature to each call and rejects the next
+        // turn unless the assistant message carries it back unchanged.
+        script.set(0, toolCall("c1", "crm__get_customer", "{\"id\":7}",
+                Map.of("google", Map.of("thought_signature", "sig-1"))));
+        script.set(1, toolCall("c2", "crm__create_ticket", "{\"subject\":\"refund for Ada\"}",
+                Map.of("google", Map.of("thought_signature", "sig-2"))));
+        JournalingEngine engine = new JournalingEngine(work());
+        crm.applyThenFailNextWrite = true;
+
+        try (AgentWorkerMain.Runner first = runner(engine)) {      // live turns
+            first.pollOnce();
+        }
+        assertEquals(List.of("sig-1"), signaturesSentBack(llmRequests.get(1)));
+
+        try (AgentWorkerMain.Runner second = runner(engine)) {     // replies rebuilt from the journal
+            second.pollOnce();
+        }
+        assertNotNull(engine.completed, "the task completed");
+        assertEquals(List.of("sig-1", "sig-2"), signaturesSentBack(llmRequests.get(2)));
+    }
+
+    private static List<String> signaturesSentBack(String request) throws Exception {
+        List<String> signatures = new ArrayList<>();
+        for (var message : JSON.readTree(request).path("messages")) {
+            for (var call : message.path("tool_calls")) {
+                signatures.add(call.path("extra_content").path("google").path("thought_signature").asText(null));
+            }
+        }
+        return signatures;
     }
 
     @Test
@@ -179,10 +213,16 @@ class AgentToolLoopEndToEndTest {
     }
 
     private static String toolCall(String id, String name, String arguments) {
+        return toolCall(id, name, arguments, null);
+    }
+
+    private static String toolCall(String id, String name, String arguments, Map<String, Object> extraContent) {
         try {
+            Map<String, Object> call = new java.util.LinkedHashMap<>(Map.of("id", id, "type", "function",
+                    "function", Map.of("name", name, "arguments", arguments)));
+            if (extraContent != null) call.put("extra_content", extraContent);
             return JSON.writeValueAsString(Map.of("choices", List.of(Map.of("message", Map.of("role", "assistant",
-                            "tool_calls", List.of(Map.of("id", id, "type", "function",
-                                    "function", Map.of("name", name, "arguments", arguments)))))),
+                            "tool_calls", List.of(call)))),
                     "usage", Map.of("prompt_tokens", 100, "completion_tokens", 20)));
         } catch (Exception exception) {
             throw new IllegalStateException(exception);

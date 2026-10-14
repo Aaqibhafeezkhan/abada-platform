@@ -4,6 +4,7 @@ import { Project } from '@/api/projects';
 import { WorkflowFile, SimulationLog } from '@/types';
 import { aplToWorkflow, parseAPLYaml, stringifyAPLYaml, workflowToAPL } from '@/lib/apl/parser';
 import { nodeChanges, type NodeChange } from '@/lib/apl/nodeChanges';
+import { playCue } from '@/lib/sound';
 
 export interface AuthoringCandidate extends AplGenerationCandidate {
   workflow: WorkflowFile;
@@ -29,6 +30,7 @@ export function useAplAuthoringState(
       return;
     }
     setIsGenerating(true);
+    playCue('loading', { emphasis: 'subtle' });
     const timestamp = () => new Date().toLocaleTimeString();
 
     setSimulationLogs(prev => [
@@ -58,6 +60,8 @@ export function useAplAuthoringState(
         replaceWorkflowId: replaceCurrent ? currentWorkflow.id : undefined,
         changes: mode === 'refine' ? nodeChanges(currentWorkflow, candidateWorkflow) : undefined });
       setDesignerMode('apl');
+      // A candidate is there to review; nothing is confirmed yet.
+      playCue('ready', { emphasis: 'subtle' });
 
       setSimulationLogs(prev => [
         ...prev,
@@ -72,6 +76,7 @@ export function useAplAuthoringState(
         }
       ]);
     } catch (err: any) {
+      playCue('error');
       setSimulationLogs(prev => [
         ...prev,
         {

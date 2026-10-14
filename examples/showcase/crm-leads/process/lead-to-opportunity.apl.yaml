@@ -1,0 +1,153 @@
+version: abada.io/v1
+
+# Lead to opportunity: the CRM showcase (examples/showcase/crm-leads).
+#
+#   agents advise   -> `research` reads the CRM through MCP tools and writes a note
+#   rules decide    -> `qualify` scores the advice with a deterministic table
+#   humans approve  -> `sales-review` shows a custom form to a person in `sales`
+#   workers act     -> `create-opportunity` runs in the crm-worker, outside the engine
+#
+# Needs the project's `crm` tool server (tool-servers/crm.yaml) and the
+# `lead-qualification` form (forms/lead-qualification.json). The setup script
+# creates both.
+metadata:
+  key: lead_to_opportunity
+  name: Lead to opportunity
+  owner: sales
+  category: sales
+  variables:
+    - name: lead
+      type: object
+      required: true
+      description: The inbound lead (company, contact_name, contact_email, message)
+    - name: lane
+      type: string
+      description: Written by the qualify table
+    - name: deal_stage
+      type: string
+      description: Proposed by the qualify table, confirmed by the reviewer
+    - name: deal_amount
+      type: number
+      description: Set by the reviewer; the agent's estimate is used when empty
+    - name: review_notes
+      type: string
+      description: The reviewer's notes, stored on the opportunity
+
+flow:
+  entry: lead-received
+  nodes:
+    - id: lead-received
+      type: webhook
+      description: Inbound lead received
+      next: research
+
+    # The model runs outside the transaction, in the agent worker. It may read
+    # the CRM freely and write one note; it cannot create opportunities: that
+    # tool is not bound, so the model is never offered it.
+    - id: research
+      type: agent
+      description: Research the lead in the CRM
+      model: gemini-3.6-flash
+      # Tried in order while the model before is unavailable (rate limit,
+      # quota, outage); never because of what a model answered.
+      fallback_models: [gemini-3.8-flash, gemini-3.7-flash]
+      prompt: |
+        You qualify inbound sales leads for a B2B software company.
+        The lead is in ${lead}.
+        1. Look the company up with crm__find_company (a short name works best, e.g. "MongoDB").
+        2. If it exists, list its opportunities with crm__list_opportunities.
+        3. If it exists, record your research with crm__add_note: a title and a
+           three-line body (who they are, what they asked, your recommendation).
+        Score the fit from 0 to 100: an established company found in the CRM
+        that states a concrete need (how many devices or people, a timeline)
+        scores high; a company the CRM does not know, or a vague message,
+        scores low. Any opportunity in the CRM means the segment is
+        existing_customer, otherwise new_logo.
+        Estimate a first-year deal amount in USD.
+      inputs:
+        lead: ${lead}
+      tools:
+        - crm/find_company
+        - crm/list_opportunities
+        - crm/add_note
+      # Four model turns do the job (three tool calls and the answer); the
+      # headroom covers calls to an unavailable model, which also count.
+      max_turns: 10
+      max_tokens_total: 40000
+      result_variable: research
+      output_schema:
+        type: object
+        required: [fit_score, segment, estimated_amount, summary]
+        properties:
+          fit_score: { type: number, minimum: 0, maximum: 100 }
+          segment: { enum: [new_logo, existing_customer] }
+          estimated_amount: { type: number, minimum: 0 }
+          summary: { type: string, maxLength: 600 }
+          company_id: { type: string }
+      confidence_threshold: 70
+      temperature: 0.1
+      max_attempts: 3
+      # Weak or broken advice never decides anything: a person looks at it.
+      on_low_confidence: sales-review
+      on_invalid_output: sales-review
+      on_error: sales-review
+      next: qualify
+
+    # Rules decide. Same inputs, same decision, audited as DECISION_TABLE_APPLIED.
+    - id: qualify
+      type: decision-table
+      description: Qualify the lead
+      decisionKey: DMN_LEAD_QUALIFICATION_V1
+      hitPolicy: FIRST
+      inputs:
+        score: "${research.fit_score}"
+        segment: "${research.segment}"
+      rules:
+        - when: "segment == 'existing_customer'"
+          then: { lane: review, deal_stage: MEETING }
+        - when: "score >= 60.0"
+          then: { lane: review, deal_stage: SCREENING }
+        - otherwise: true
+          then: { lane: nurture, deal_stage: NEW }
+      next: route
+
+    - id: route
+      type: condition
+      description: Review or nurture
+      rules:
+        - if: "${lane == 'review'}"
+          then: sales-review
+        - else: nurtured
+          then: nurtured
+
+    # Humans approve. The form is a project resource; its fields bind to
+    # process variables by id, so `deal_stage` arrives pre-filled by the table.
+    - id: sales-review
+      type: human-input
+      description: Qualify the lead
+      assignees: [sales]
+      formKey: lead-qualification
+      sla_hours: 24
+      outcomes:
+        approve: { next: create-opportunity }
+        reject: { next: declined, comment: required }
+
+    # Workers act. A plain external task: the crm-worker creates the
+    # opportunity in Twenty and reports its id back.
+    - id: create-opportunity
+      type: engine-task
+      description: Create the opportunity in the CRM
+      service: crm.create-opportunity
+      next: won
+
+    - id: won
+      type: end
+      description: Opportunity created
+
+    - id: declined
+      type: end
+      description: Lead declined by sales
+
+    - id: nurtured
+      type: end
+      description: Lead sent to nurturing
