@@ -171,12 +171,11 @@ function column(row, name) {
 const EDGE = {
   country: "BE", region: "Brussels Capital", city: "Brussels", continent: "EU", timezone: "Europe/Brussels",
   asn: 5432, asOrganization: "Proximus NV",
-};
+}; // the edge offers more than we keep: only country and region are stored
 
 test("records an installer fetch with location from the edge and never the address", async () => {
   const { env } = environment();
   env.USAGE_DB = usageDatabase();
-  env.USAGE_SALT = "salt";
   const ctx = context();
 
   const response = await worker.fetch(
@@ -194,14 +193,13 @@ test("records an installer fetch with location from the edge and never the addre
   const row = env.USAGE_DB.rows[0];
   assert.equal(column(row, "kind"), "installer_fetch");
   assert.equal(column(row, "country"), "BE");
-  assert.equal(column(row, "city"), "Brussels");
   assert.equal(column(row, "region"), "Brussels Capital");
-  assert.equal(column(row, "asn"), 5432);
-  assert.equal(column(row, "as_org"), "Proximus NV");
-  assert.equal(column(row, "user_agent"), "curl/8.7.1");
-  assert.match(column(row, "ip_hash"), /^[0-9a-f]{16}$/);
-  // The address itself is nowhere in what is stored.
-  assert.ok(!JSON.stringify(row).includes("203.0.113.7"));
+  // Nothing finer than region, no network owner, no address, no user agent: not even as columns.
+  assert.ok(!/city|asn|as_org|ip_hash|user_agent|timezone|continent/.test(row.sql));
+  const stored = JSON.stringify(row);
+  for (const value of ["203.0.113.7", "Brussels\"", "Proximus", "curl/8.7.1", "5432"]) {
+    assert.ok(!stored.includes(value), value);
+  }
 });
 
 test("counts the version pointer and a bundle download, not HEAD requests or checksum files", async () => {
@@ -224,8 +222,6 @@ test("counts the version pointer and a bundle download, not HEAD requests or che
 
   const kinds = env.USAGE_DB.rows.map((row) => [column(row, "kind"), column(row, "version")]);
   assert.deepEqual(kinds, [["version_check", null], ["bundle_download", "1.1.0"]]);
-  // Without a salt there is no hash at all, never an unsalted one.
-  assert.equal(column(env.USAGE_DB.rows[0], "ip_hash"), null);
 });
 
 test("serving never depends on recording: no database, or a failing one, changes nothing", async () => {
@@ -248,7 +244,6 @@ test("serving never depends on recording: no database, or a failing one, changes
 test("accepts a reported outcome with only the allowed fields and takes location from the edge", async () => {
   const { env } = environment();
   env.USAGE_DB = usageDatabase();
-  env.USAGE_SALT = "salt";
   const ctx = context();
   const report = {
     event: "install_failed", version: "1.1.0", install_id: "0b8f3c52-9f1f-4c0e-8a58-0d5b4c0f6e11",
@@ -275,6 +270,7 @@ test("accepts a reported outcome with only the allowed fields and takes location
   assert.equal(column(row, "llm_key_provided"), 0);
   assert.equal(column(row, "country"), "BE");
   assert.ok(!JSON.stringify(row).includes("198.51.100.9"));
+  assert.ok(!/city|asn|ip_hash|user_agent/.test(row.sql));
 });
 
 test("refuses anything that is not on the list, is the wrong shape or is too large", async () => {
@@ -306,12 +302,10 @@ test("refuses anything that is not on the list, is the wrong shape or is too lar
 test("drops reports beyond the daily cap per installer without telling the sender", async () => {
   const { env } = environment();
   env.USAGE_DB = usageDatabase({ seen: 20 });
-  env.USAGE_SALT = "salt";
   const ctx = context();
   const response = await worker.fetch(
     requestWith("https://install.abadaplatform.com/v1/install-event", {
-      method: "POST", cf: EDGE, body: JSON.stringify({ event: "install_succeeded", version: "1.1.0" }),
-      headers: { "CF-Connecting-IP": "203.0.113.7" },
+      method: "POST", cf: EDGE, body: JSON.stringify({ event: "install_succeeded", version: "1.1.0", install_id: "0b8f3c52-9f1f-4c0e-8a58-0d5b4c0f6e11" }),
     }),
     env,
     ctx

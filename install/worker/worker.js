@@ -24,7 +24,7 @@ const LATEST_PATH = "/latest";
 const INSTALLER_PATH = "/install.sh";
 const EVENT_PATH = "/v1/install-event";
 const MAX_EVENT_BYTES = 2048;
-/** Reported outcomes accepted per unique installer and day; the rest are dropped silently. */
+/** Reported outcomes accepted per install id and day; the rest are dropped silently. */
 const DAILY_EVENT_CAP = 20;
 /** Rows older than this are deleted by the daily scheduled run (13 months). */
 const RETENTION_DAYS = 395;
@@ -137,20 +137,18 @@ async function acceptInstallEvent(request, env, ctx) {
 
 const COLUMNS = [
   "received_at", "kind", "version", "install_id", "failed_step", "os", "arch", "docker_version", "profile",
-  "duration_s", "llm_key_provided", "ci", "country", "region", "city", "continent", "timezone", "asn", "as_org",
-  "ip_hash", "user_agent",
+  "duration_s", "llm_key_provided", "ci", "country", "region",
 ];
 
 async function record(env, request, row, options = {}) {
   if (!env.USAGE_DB) return;
   const cf = request.cf ?? {};
   const now = new Date();
-  const ipHash = await hashIp(request.headers.get("CF-Connecting-IP"), now, env.USAGE_SALT);
-  if (options.capped && ipHash) {
+  if (options.capped && row.install_id) {
     const dayStart = `${now.toISOString().slice(0, 10)}T00:00:00.000Z`;
     const seen = await env.USAGE_DB.prepare(
-      "SELECT COUNT(*) AS n FROM install_events WHERE ip_hash = ? AND kind IN ('install_succeeded', 'install_failed') AND received_at >= ?"
-    ).bind(ipHash, dayStart).first();
+      "SELECT COUNT(*) AS n FROM install_events WHERE install_id = ? AND kind IN ('install_succeeded', 'install_failed') AND received_at >= ?"
+    ).bind(row.install_id, dayStart).first();
     if (seen && seen.n >= DAILY_EVENT_CAP) return;
   }
   const values = {
@@ -158,29 +156,11 @@ async function record(env, request, row, options = {}) {
     ...row,
     country: cf.country ?? null,
     region: cf.region ?? null,
-    city: cf.city ?? null,
-    continent: cf.continent ?? null,
-    timezone: cf.timezone ?? null,
-    asn: Number.isInteger(cf.asn) ? cf.asn : null,
-    as_org: cf.asOrganization ? String(cf.asOrganization).slice(0, 80) : null,
-    ip_hash: ipHash,
-    user_agent: (request.headers.get("User-Agent") ?? "").slice(0, 120) || null,
   };
   const params = COLUMNS.map((column) => (values[column] === undefined ? null : values[column]));
   await env.USAGE_DB.prepare(
     `INSERT INTO install_events (${COLUMNS.join(", ")}) VALUES (${COLUMNS.map(() => "?").join(", ")})`
   ).bind(...params).run();
-}
-
-/**
- * A truncated SHA-256 of the address, the UTC date and a secret salt: enough to count unique installers per day,
- * useless for finding an address afterwards, and different every day. Without a configured salt nothing is stored.
- */
-async function hashIp(ip, now, salt) {
-  if (!ip || !salt) return null;
-  const input = new TextEncoder().encode(`${ip}|${now.toISOString().slice(0, 10)}|${salt}`);
-  const digest = await crypto.subtle.digest("SHA-256", input);
-  return [...new Uint8Array(digest)].slice(0, 8).map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
 async function purge(env) {

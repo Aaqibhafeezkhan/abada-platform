@@ -14,7 +14,7 @@
 #   install_succeeded / install_failed   the one report the installer sends when it finishes, unless the
 #                      person opted out (ABADA_USAGE_PING=0 or DO_NOT_TRACK=1). Opt-outs are therefore
 #                      visible only as fetches without a report; treat reports as a floor, not a count.
-#   unique installers  distinct daily-salted address hashes per day: one person behind one address counts once.
+#   unique installers  distinct random install ids: one installation counts once.
 set -euo pipefail
 
 MODE="summary"
@@ -64,19 +64,17 @@ for row in cells:
 case "$MODE" in
   summary)
     query "Last ${DAYS} days by kind" \
-      "SELECT kind, COUNT(*) AS events, COUNT(DISTINCT ip_hash) AS unique_installers_day_sum FROM install_events WHERE received_at >= ${SINCE} GROUP BY kind ORDER BY events DESC"
+      "SELECT kind, COUNT(*) AS events, COUNT(DISTINCT install_id) AS distinct_installs FROM install_events WHERE received_at >= ${SINCE} GROUP BY kind ORDER BY events DESC"
     query "Install outcome (reports from installers; ci = our own runners)" \
       "SELECT kind, ci, COUNT(*) AS n FROM install_events WHERE kind IN ('install_succeeded','install_failed') AND received_at >= ${SINCE} GROUP BY kind, ci"
     ;;
   daily)
     query "Per day: downloads, reports, unique installers" \
-      "SELECT substr(received_at,1,10) AS day, SUM(kind='bundle_download') AS bundle_downloads, SUM(kind='install_succeeded') AS succeeded, SUM(kind='install_failed') AS failed, COUNT(DISTINCT ip_hash) AS unique_installers FROM install_events WHERE received_at >= ${SINCE} GROUP BY day ORDER BY day DESC"
+      "SELECT substr(received_at,1,10) AS day, SUM(kind='bundle_download') AS bundle_downloads, SUM(kind='install_succeeded') AS succeeded, SUM(kind='install_failed') AS failed, COUNT(DISTINCT install_id) AS distinct_installs FROM install_events WHERE received_at >= ${SINCE} GROUP BY day ORDER BY day DESC"
     ;;
   countries)
     query "Where installs come from (reports, excluding CI)" \
-      "SELECT country, region, city, COUNT(*) AS installs FROM install_events WHERE kind='install_succeeded' AND COALESCE(ci,0)=0 AND received_at >= ${SINCE} GROUP BY country, region, city ORDER BY installs DESC LIMIT 50"
-    query "Network types (who runs it: cloud, ISP, university...)" \
-      "SELECT as_org, COUNT(*) AS installs FROM install_events WHERE kind='install_succeeded' AND COALESCE(ci,0)=0 AND received_at >= ${SINCE} GROUP BY as_org ORDER BY installs DESC LIMIT 20"
+      "SELECT country, region, COUNT(*) AS installs FROM install_events WHERE kind='install_succeeded' AND COALESCE(ci,0)=0 AND received_at >= ${SINCE} GROUP BY country, region ORDER BY installs DESC LIMIT 50"
     ;;
   failures)
     query "Failed installs by step" \
@@ -92,7 +90,7 @@ case "$MODE" in
     ;;
   recent)
     query "Most recent reports" \
-      "SELECT received_at, kind, version, country, city, os, arch, failed_step, duration_s FROM install_events WHERE kind IN ('install_succeeded','install_failed') ORDER BY id DESC LIMIT 25"
+      "SELECT received_at, kind, version, country, os, arch, failed_step, duration_s FROM install_events WHERE kind IN ('install_succeeded','install_failed') ORDER BY id DESC LIMIT 25"
     ;;
   raw)
     query "raw" "$RAW_SQL"
