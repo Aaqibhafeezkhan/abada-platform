@@ -1,0 +1,24 @@
+{
+  "title": "Qualify the lead",
+  "fields": [
+    {
+      "id": "deal_stage",
+      "type": "select",
+      "label": "Pipeline stage",
+      "required": true,
+      "options": ["NEW", "SCREENING", "MEETING", "PROPOSAL"]
+    },
+    {
+      "id": "deal_amount",
+      "type": "number",
+      "label": "First-year amount (USD)",
+      "placeholder": "Leave empty to use the agent's estimate"
+    },
+    {
+      "id": "review_notes",
+      "type": "textarea",
+      "label": "Notes for the account team",
+      "placeholder": "Saved on the opportunity in the CRM"
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+# The `crm` tool server of the CRM showcase. The setup script creates it as a
+# TOOL_SERVER resource of the project.
+#
+# crm-mcp (mcp/crm_mcp.py) is a narrow MCP facade over the Twenty REST API: the
+# agent sees three tools, not the whole CRM. Plain http is accepted because the
+# showcase overlay sets abada.tools.allow-insecure-http for the dev engine; a
+# real deployment serves its MCP server over https.
+name: crm
+description: Twenty CRM (companies, opportunities, notes)
+transport: streamable-http
+url: http://crm-mcp:8770/mcp
+# Name of the project tool credential holding the bearer token crm-mcp expects.
+# The engine stores it encrypted and hands it only to the worker leasing a task
+# bound to this server.
+credential: crm-mcp-token
+tools:
+  find_company: { policy: read }
+  list_opportunities: { policy: read }
+  # A side effect: journaled before it runs and sent with the engine's
+  # per-step Idempotency-Key, which crm-mcp honours, so a retry never
+  # writes the note twice.
+  add_note: { policy: write, idempotency: key }
