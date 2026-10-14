@@ -24,7 +24,7 @@ bucket_name = "abada-releases"
 [[d1_databases]]
 binding = "USAGE_DB"
 database_name = "abada-usage"
-database_id = "REPLACE_WITH_ID_FROM_wrangler_d1_create"
+database_id = "7a2ab244-fae4-4d6a-aef6-e47556852841"
 migrations_dir = "migrations"
 
 # Delete events past the retention period, once a day.
