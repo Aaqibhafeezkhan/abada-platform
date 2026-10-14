@@ -326,7 +326,8 @@ Evidence: [`AplBoundaryRuntimeTest`](../../engine/src/test/java/com/abada/engine
   is not retried; the node's `on_error` catching that code (or the catch-all)
   is taken with `<id>_error_code` set, otherwise a `WORK_FAILED` incident opens
   whose message names the code.
-- **Agent limits.** `max_turns` (per attempt), `max_tokens_total` and
+- **Agent limits.** `max_turns` (completed model calls per attempt; a failed
+  call, such as an unavailable model, spends no turn), `max_tokens_total` and
   `budget_usd` (per task, across attempts) are checked when a model call is
   journaled; past a limit the step is refused (`TURN_LIMIT`, `TOKEN_LIMIT`,
   `BUDGET`, `BUDGET_UNPRICED`) and the worker reports `AGENT_BUDGET_EXHAUSTED`.

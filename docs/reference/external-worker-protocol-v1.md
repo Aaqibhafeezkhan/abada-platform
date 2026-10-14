@@ -140,7 +140,8 @@ committed step:
   a single-call agent records `{value, confidence}`. A `TOOL_CALL` request is
   `{callId, arguments}` and its result `{content, isError, truncated}`.
 - A new `MODEL_CALL` is also refused past the node's limits: `TURN_LIMIT`
-  (`max_turns` of this attempt), `TOKEN_LIMIT` and `BUDGET` (the task's
+  (`max_turns` `COMPLETED` model calls in this attempt; `FAILED` ones, such
+  as an unavailable model, do not count), `TOKEN_LIMIT` and `BUDGET` (the task's
   journaled tokens and engine-computed cost), `BUDGET_UNPRICED` (a budget and
   a model without a price). Journal model calls `STARTED` before calling the
   model so the refusal comes before the spend.

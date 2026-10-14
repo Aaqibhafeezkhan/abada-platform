@@ -85,7 +85,8 @@ exist and how dangerous they are; the engine enforces both.
   meanwhile the worker holds no lease and spends nothing.
 - **Limits and cost.** `max_turns`, `max_tokens_total` and `budget_usd` on the
   node bound the loop; reaching one ends the step through `on_error` with
-  `AGENT_BUDGET_EXHAUSTED`. Cost is computed by the engine from the token
+  `AGENT_BUDGET_EXHAUSTED`. Only model calls that answered count as turns, so
+  a provider outage does not spend them. Cost is computed by the engine from the token
   counts and the prices in **Settings → Model Prices** (USD per million tokens,
   effective-dated); a budget fails closed for an unpriced model.
 
