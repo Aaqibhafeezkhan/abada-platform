@@ -179,7 +179,7 @@ class ExampleGalleryTest {
                 .containsExactly(ToolPolicy.READ, ToolPolicy.READ, ToolPolicy.WRITE);
         assertThat(bindings.get(2).idempotency()).isEqualTo("key");
         assertThat(research.agentWork().fallbackModels()).containsExactly("gemini-3.8-flash", "gemini-3.7-flash");
-        assertThat(research.agentWork().limits().maxTurns()).isEqualTo(6);
+        assertThat(research.agentWork().limits().maxTurns()).isEqualTo(10);
 
         externalTasks().complete(research.id(), "gallery-worker", Map.of("research", Map.of("fit_score", 95,
                 "segment", "new_logo", "estimated_amount", 48000, "summary", "Clear need", "_confidence", 90)));

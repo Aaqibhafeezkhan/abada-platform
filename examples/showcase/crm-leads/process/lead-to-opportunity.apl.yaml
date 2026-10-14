@@ -70,7 +70,9 @@ flow:
         - crm/find_company
         - crm/list_opportunities
         - crm/add_note
-      max_turns: 6
+      # Four model turns do the job (three tool calls and the answer); the
+      # headroom covers calls to an unavailable model, which also count.
+      max_turns: 10
       max_tokens_total: 40000
       result_variable: research
       output_schema:
