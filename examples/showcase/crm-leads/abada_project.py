@@ -169,7 +169,8 @@ def status():
         variables = {name: entry.get("value") for name, entry in wrapped.items()}
         company = (variables.get("lead") or {}).get("company", "?")
         print(f"{instance['id'][:8]}  {instance.get('status', '?'):10} {company:24} "
-              f"lane={variables.get('lane', '-')}  opportunity={variables.get('opportunity_url', '-')}")
+              f"at={instance.get('currentActivityId') or '-':20} lane={variables.get('lane', '-'):8} "
+              f"opportunity={variables.get('opportunity_url', '-')}")
 
 
 if __name__ == "__main__":
