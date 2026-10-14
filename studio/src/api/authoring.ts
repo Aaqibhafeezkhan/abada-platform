@@ -3,9 +3,10 @@ import { apiError, authenticatedFetch } from '@/api/authenticatedFetch';
 
 export interface AplGenerationCandidate {
   aplSource: string;
-  provider: 'LLM' | 'LOCAL_FALLBACK';
+  provider: 'LLM';
   model?: string;
   attempts: number;
+  /** Non-sensitive notes, including any step of the request the model left out of the process. */
   warnings: string[];
   /** For a refinement: the model's one-sentence account of the change, and the operations the engine applied. */
   summary?: string;

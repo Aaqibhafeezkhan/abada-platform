@@ -11,7 +11,7 @@ interface AplEditorProps {
   workflow: WorkflowFile;
   initialSource?: string;
   candidate?: {
-    provider: 'LLM' | 'LOCAL_FALLBACK';
+    provider: 'LLM';
     model?: string;
     attempts: number;
     warnings: string[];
@@ -204,10 +204,8 @@ export const AplEditor: React.FC<AplEditorProps> = ({ workflow, initialSource, c
           <span className="text-xs font-semibold">{workflow.name}</span>
           <span className="text-[10px] font-mono text-[#2A9D8F] bg-[#2A9D8F]/10 border border-[#2A9D8F]/30 px-1.5 py-0.5 rounded">abada.io/v1</span>
           {candidate && (
-            <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded border ${candidate.provider === 'LLM'
-              ? 'text-[#9D4EDD] border-[#9D4EDD]/30 bg-[#9D4EDD]/10'
-              : 'text-[#F4A261] border-[#F4A261]/30 bg-[#F4A261]/10'}`}>
-              {candidate.provider === 'LLM' ? `${candidate.model || 'LLM'} · ${candidate.attempts} attempt(s)` : 'Local fallback'}
+            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded border text-[#9D4EDD] border-[#9D4EDD]/30 bg-[#9D4EDD]/10">
+              {`${candidate.model || 'LLM'} · ${candidate.attempts} attempt(s)`}
             </span>
           )}
           {dirty && <span className="text-[10px] text-[#F4A261]">Modified</span>}
@@ -331,6 +329,18 @@ export const AplEditor: React.FC<AplEditorProps> = ({ workflow, initialSource, c
         </ul>
       )}
 
+      {candidate?.warnings.length ? (
+        <div role="status" aria-label="Generation warnings"
+          className="border-t border-[#F4A261]/40 bg-[#F4A261]/10 px-4 py-2 text-[11px] text-[#F4A261]">
+          <p className="flex items-center gap-1.5 font-semibold">
+            <AlertTriangle className="w-3.5 h-3.5" />Check this candidate against your request before applying
+          </p>
+          <ul className="mt-1 list-disc pl-5 text-[#EAE3D9]">
+            {candidate.warnings.map((warning, index) => <li key={index}>{warning}</li>)}
+          </ul>
+        </div>
+      ) : null}
+
       {candidate?.summary && (
         <div aria-label="Proposed change" className="border-t border-[#3A322E] bg-[#211C19] px-4 py-2 text-[11px] text-[#EAE3D9]">
           <p>{candidate.summary}</p>
@@ -357,11 +367,6 @@ export const AplEditor: React.FC<AplEditorProps> = ({ workflow, initialSource, c
           : check.state === 'done' ? <span className="text-[#90A955] flex items-center gap-1.5"><CheckCircle2 className="w-3.5 h-3.5" />Valid APL</span>
           : check.state === 'unavailable' ? <span className="text-[#A89F91]">Engine validation unavailable; the engine checks again on save and deploy.</span>
           : <span className="text-[#737D69]">Paste or edit canonical APL YAML. Press Ctrl/⌘+S to validate and apply.</span>}
-        {candidate?.warnings.length ? (
-          <span className="ml-auto truncate text-[#F4A261]" title={candidate.warnings.join(' · ')}>
-            {candidate.warnings.join(' · ')}
-          </span>
-        ) : null}
       </div>
     </section>
   );
