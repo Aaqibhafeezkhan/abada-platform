@@ -1,0 +1,122 @@
+{
+  "$comment": "Every public claim and what proves it. A claim's proof is a file in this repository (and, optionally, text that file must contain). scripts/check-claims.mjs fails the build when a proof is missing, and when a page cites a claim that is not here. status: released (in the published release), next (built and tested, not yet published).",
+  "claims": [
+    {
+      "id": "model-outside-transaction",
+      "status": "released",
+      "text": "A model call never runs inside a workflow transaction; its result enters process state only through an engine command that validates it.",
+      "proof": [
+        { "path": "docs/architecture/runtime-state.md" },
+        { "path": "engine/src/main/java/com/abada/engine/core/agent/AgentOutputValidator.java" },
+        { "path": "engine/src/test/java/com/abada/engine/core/AgentOutputContractTest.java" }
+      ]
+    },
+    {
+      "id": "engine-enforces-contract",
+      "status": "released",
+      "text": "The engine checks every agent answer against its declared output schema, result variable and confidence threshold, and routes a weak or malformed answer to a declared path, usually a person.",
+      "proof": [
+        { "path": "engine/src/main/java/com/abada/engine/core/agent/AgentOutputValidator.java", "contains": "LOW_CONFIDENCE" },
+        { "path": "engine/src/test/java/com/abada/engine/core/AgentOutputContractTest.java" }
+      ]
+    },
+    {
+      "id": "deterministic-rules",
+      "status": "released",
+      "text": "Conditions and decision tables are sandboxed expressions evaluated inside the transaction; they cannot reach the JVM and fail loudly instead of guessing.",
+      "proof": [
+        { "path": "engine/src/main/java/com/abada/engine/expression/DefinitionPolicyValidator.java" },
+        { "path": "docs/reference/runtime-semantics.md", "contains": "CEL" }
+      ]
+    },
+    {
+      "id": "postgres-only",
+      "status": "released",
+      "text": "PostgreSQL is the only required infrastructure; schema upgrades from every supported prior version are tested on PostgreSQL.",
+      "proof": [
+        { "path": "docs/reference/deployment-support.md" },
+        { "path": "engine/src/test/java/com/abada/engine/persistence/PostgresSchemaUpgradeTest.java" }
+      ]
+    },
+    {
+      "id": "human-approved-writes",
+      "status": "released",
+      "text": "An agent's write to an outside system can require a person's approval of the exact call, and a crash never repeats an approved write.",
+      "proof": [
+        { "path": "engine/src/test/java/com/abada/engine/core/agent/PostgresToolApprovalTest.java" },
+        { "path": "docs/development/1.1-rc.2-gate-report-2026-10-10.md" }
+      ]
+    },
+    {
+      "id": "governed-delegation",
+      "status": "released",
+      "text": "A process can start a governed child process, and an agent can propose to; an engine kill mid-child neither duplicates nor orphans it.",
+      "proof": [
+        { "path": "engine/src/test/java/com/abada/engine/core/agent/PostgresAgentDelegationTest.java" },
+        { "path": "engine/src/test/java/com/abada/engine/core/delegation/PostgresCallProcessCrashTest.java" }
+      ]
+    },
+    {
+      "id": "evidence-per-decision",
+      "status": "released",
+      "text": "Every agent step leaves an auditable record (model, tokens, cost, timings, actors) in the same store as the process state, with payloads encrypted and cleared after a retention period.",
+      "proof": [
+        { "path": "engine/src/test/java/com/abada/engine/core/agent/PostgresEvidenceAndCostTest.java" },
+        { "path": "docs/reference/apl-specification.md", "contains": "Agent evidence and cost" }
+      ]
+    },
+    {
+      "id": "open-source",
+      "status": "released",
+      "text": "The engine is open source under the GNU AGPL-3.0, and the worker SDK is Apache-2.0.",
+      "proof": [
+        { "path": "LICENSE", "contains": "GNU AFFERO GENERAL PUBLIC LICENSE" },
+        { "path": "sdk/java/LICENSE", "contains": "Apache License" }
+      ]
+    },
+    {
+      "id": "override-signals",
+      "status": "next",
+      "text": "The Insight loop notices when people keep overruling an agent, when its confidence drifts, or when it becomes expensive, and says which step it concerns.",
+      "proof": [
+        { "path": "engine/src/test/java/com/abada/engine/insight/InsightAnalyzerAgentSignalsTest.java" },
+        { "path": "engine/src/test/java/com/abada/engine/core/PostgresInsightReviewFactTest.java" }
+      ]
+    },
+    {
+      "id": "replay-before-approval",
+      "status": "next",
+      "text": "A proposed change can be replayed on recorded cases before anyone approves it, and a policy can require it. A replay is evidence of what would have changed, not a verdict.",
+      "proof": [
+        { "path": "engine/src/test/java/com/abada/engine/core/replay/PostgresReplayTest.java" },
+        { "path": "docs/reference/insight-loop.md", "contains": "## Replay before approval" }
+      ]
+    },
+    {
+      "id": "one-click-rollback",
+      "status": "next",
+      "text": "A process can be returned to an earlier version with one audited action; instances already running are not touched.",
+      "proof": [
+        { "path": "engine/src/test/java/com/abada/engine/core/PostgresRollbackTest.java" }
+      ]
+    },
+    {
+      "id": "patch-authoring",
+      "status": "next",
+      "text": "A natural-language refinement is applied as a short list of operations the engine validates, and is refused rather than faked when no model is available.",
+      "proof": [
+        { "path": "engine/src/test/java/com/abada/engine/authoring/AplAuthoringGoldenTest.java" },
+        { "path": "engine/src/test/java/com/abada/engine/authoring/AplPatchServiceTest.java" }
+      ]
+    },
+    {
+      "id": "bounded-for-each",
+      "status": "next",
+      "text": "A process can run a governed child per item of a list, with a hard bound on items and on how many run at once; one failing item does not stop the others.",
+      "proof": [
+        { "path": "engine/src/test/java/com/abada/engine/core/delegation/PostgresForEachTest.java" },
+        { "path": "engine/src/test/java/com/abada/engine/core/delegation/PostgresForEachCrashTest.java" }
+      ]
+    }
+  ]
+}
