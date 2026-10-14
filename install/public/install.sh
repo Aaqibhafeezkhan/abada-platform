@@ -9,7 +9,7 @@ set -euo pipefail
 #
 # Anonymous install report: when it finishes, the installer sends ONE event to
 # install.abadaplatform.com (version, OS, CPU architecture, Docker version,
-# outcome and, on failure, the step; your country and city come from your IP
+# outcome and, on failure, the step; your country and region come from your IP
 # address at the receiving end, which is not stored). Nothing else leaves your
 # machine and the running platform sends nothing. Turn it off with
 #   ABADA_USAGE_PING=0   (for the pipeline: curl ... | ABADA_USAGE_PING=0 bash)
@@ -86,7 +86,7 @@ send_usage_event() {
 
 if usage_ping_enabled; then
   info "When it finishes, this installer sends one anonymous report to install.abadaplatform.com:"
-  info "version, OS, CPU architecture, Docker version, outcome. Your country and city come from"
+  info "version, OS, CPU architecture, Docker version, outcome. Your country and region come from"
   info "your IP address, which is not stored. Opt out: ABADA_USAGE_PING=0 or DO_NOT_TRACK=1."
 fi
 

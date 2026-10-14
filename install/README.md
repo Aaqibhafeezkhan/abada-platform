@@ -72,11 +72,10 @@ stay true to this section, is
 | `install_succeeded`, `install_failed` | `install.sh`, once, from its exit trap, to `POST /v1/install-event` | `ABADA_USAGE_PING=0`, `DO_NOT_TRACK=1`, or a mirror (`ABADA_RELEASE_BASE_URL`) |
 
 Rows go to the D1 database `abada-usage` (`install_events`, see
-`worker/migrations/`). Location (country, region, city, continent, time zone,
-ASN and network owner) comes from Cloudflare's `request.cf` at request time.
-The address is never stored: `ip_hash` is a 16-hex truncation of
-`sha256(address | UTC date | USAGE_SALT)`, so it can count unique installers
-within a day and nothing else; without the secret nothing is hashed or stored.
+`worker/migrations/`). Location (country and region only) comes from Cloudflare's `request.cf` at
+request time. Nothing finer is stored: no city, network owner, time zone,
+address, hash of the address or user agent. Unique installers are counted by
+the random install id.
 The Worker accepts only the allow-listed fields in `EVENT_FIELDS`, caps
 reports per installer and day, and deletes rows older than 395 days in a daily
 scheduled run. Recording is best effort and can never delay or fail a download.
@@ -90,7 +89,6 @@ event marked `ci` proves the route is live.
 ```bash
 cd install/worker
 npx wrangler d1 create abada-usage          # copy the printed database_id into wrangler.toml
-npx wrangler secret put USAGE_SALT          # any long random string
 npx wrangler d1 migrations apply abada-usage --remote
 ```
 
@@ -103,15 +101,15 @@ nothing is recorded.
 
 ```bash
 ./scripts/release/usage-report.sh summary      # last 30 days by kind and outcome
-./scripts/release/usage-report.sh daily 90     # per day: downloads, reports, unique installers
-./scripts/release/usage-report.sh countries    # where installs come from, and from which networks
+./scripts/release/usage-report.sh daily 90     # per day: downloads, reports, distinct install ids
+./scripts/release/usage-report.sh countries    # where installs come from (country, region)
 ./scripts/release/usage-report.sh failures     # failed installs by step
 ./scripts/release/usage-report.sh versions | platforms | recent
 ./scripts/release/usage-report.sh raw "SELECT ..."
 ```
 
 Reports are a floor, not a count: anyone who opts out appears only as a
-download. Local testing: `wrangler dev --local --var USAGE_SALT:test` and
+download. Local testing: `wrangler dev --local` and
 `usage-report.sh … --local`.
 
 ## One-time Cloudflare and GitHub setup

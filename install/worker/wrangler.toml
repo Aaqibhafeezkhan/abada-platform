@@ -19,7 +19,6 @@ bucket_name = "abada-releases"
 
 # Install events (install/README.md, "Install events"). One-time setup:
 #   npx wrangler d1 create abada-usage        # then put the printed id below
-#   npx wrangler secret put USAGE_SALT        # any long random string; rotating it only resets daily dedupe
 # Without the binding or the secret the Worker still serves everything and simply records nothing.
 [[d1_databases]]
 binding = "USAGE_DB"
