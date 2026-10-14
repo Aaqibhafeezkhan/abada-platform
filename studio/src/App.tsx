@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Header } from '@/components/Header';
 import { Sidebar } from '@/components/Sidebar';
+import { SidePanel } from '@/components/SidePanel';
 import { Canvas } from '@/features/designer/Canvas';
 import { PropertiesInspector } from '@/components/PropertiesInspector';
 import { NLInputBar } from '@/components/NLInputBar';
@@ -55,6 +56,10 @@ import { runSequentialInsightEvidence } from '@/lib/starter/insightEvidence';
 
 type StudioView = 'designer' | 'inbox' | 'operations' | 'instance' | 'administration' | 'insight';
 type DesignerMode = 'diagram' | 'apl';
+
+/** The designer's side panels: resizable within these bounds, pinned beside the canvas or folded to a rail. */
+const EXPLORER_PANEL = { defaultWidth: 256, minWidth: 200, maxWidth: 480 };
+const INSPECTOR_PANEL = { defaultWidth: 320, minWidth: 280, maxWidth: 640 };
 
 export default function App() {
   const { showToast } = useToast();
@@ -573,6 +578,7 @@ export default function App() {
         ) : (
           <>
         {currentView === 'designer' && (
+          <SidePanel id="designer-explorer" side="left" label="Explorer" bounds={EXPLORER_PANEL}>
           <Sidebar
             workflows={workflows}
             activeWorkflowId={activeWorkflowId}
@@ -599,6 +605,7 @@ export default function App() {
             instancesRefreshKey={instancesRefreshKey}
             treeRefreshKey={treeRefreshKey}
           />
+          </SidePanel>
         )}
         {currentView === 'designer' && (
           <>
@@ -716,6 +723,7 @@ export default function App() {
                     canRedo={canRedo}
                   />
 
+                  <SidePanel id="designer-inspector" side="right" label="Properties" bounds={INSPECTOR_PANEL}>
                   <PropertiesInspector
                     selectedNode={selectedNode}
                     onUpdateNode={handleUpdateNode}
@@ -725,6 +733,7 @@ export default function App() {
                     projectId={activeProject?.id}
                     issues={selectedNode ? validation.issuesByNode.get(selectedNode.id) : undefined}
                   />
+                  </SidePanel>
 
                   <NLInputBar
                     onGenerateWorkflow={handleGenerateWorkflow}
