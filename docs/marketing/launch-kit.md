@@ -83,7 +83,7 @@ defensiveness. Have the FAQ below open.
 
 - **r/selfhosted** — title: "Abada: self-hosted process engine for AI workflows with
   human approval (Docker, PostgreSQL, OIDC)". Lead with the install command, screenshots,
-  resource needs **[verify: measure RAM/CPU of the dev stack]**, and "telemetry off by default".
+  resource needs (≈1 GB RAM idle for the whole dev stack, ≈2.4 GB of images — see *Measured footprint*), and "telemetry off by default".
 - **r/java / r/SpringBoot** — lead with the engineering: transactional outbox, durable
   leases, PostgreSQL Testcontainers as the correctness reference, Camunda 7 import.
   Link the cornerstone post, not the homepage.
@@ -124,7 +124,7 @@ Changelog News, TLDR (AI / DevOps), Self-Host Weekly (selfh.st), DevOps'ish, AI 
 | Is it production ready? | It is a release candidate. Certified: self-hosted Docker Compose, one or more engines on PostgreSQL. Not yet: public-cloud certification, independent security review. |
 | Single maintainer? | Yes today. That is why contributors are wanted; the test suite, gate reports and AGENTS.md exist so others can contribute safely. |
 | Which models? | Gemini, OpenAI, Anthropic, DeepSeek, OpenRouter or any OpenAI-compatible gateway. |
-| Resource needs? | **[verify: measure the dev stack with `docker stats`]** |
+| Resource needs? | The full dev stack (8 containers incl. Keycloak and two PostgreSQL) uses about 1 GB of RAM at idle and well under 0.1 CPU core; the engine is ~560 MB of that. Images take about 2.4 GB of disk. Give Docker at least 4 GB. Measured on Apple silicon — see *Measured footprint*. |
 
 ## Talk abstract
 
@@ -143,3 +143,31 @@ Abada runtime — and discuss what we got wrong along the way.
 
 **Formats:** 45-min talk, 20-min short version, 3-hour hands-on lab (install → agent
 process → approval → audit).
+
+## Measured footprint
+
+Measured 2026-10-14 with `docker stats` (5 samples, 6 s apart) on a warm, idle dev stack
+(`./release/abada-platform up dev`, locally built `:local` images, up for 39 hours) on
+Apple silicon, Docker Desktop with 10 CPUs and 7.75 GiB of memory.
+
+| Container | Idle memory | Memory limit | Idle CPU | Image size |
+| --- | --- | --- | --- | --- |
+| Engine | 561 MiB | 2 GiB | 0.6–1.4 % | 639 MB |
+| Keycloak (dev identity) | 297 MiB | 1 GiB | 0.2 % | 726 MB |
+| Agent worker | 72 MiB | 512 MiB | 0.3–1.2 % | 298 MB |
+| PostgreSQL (Abada) | 42 MiB | 1 GiB | 0.5–1.9 % | 380 MB (shared) |
+| Traefik | 38 MiB | 256 MiB | 0 % | 225 MB |
+| PostgreSQL (Keycloak) | 26 MiB | 512 MiB | 0–1.2 % | shared |
+| Studio | 9 MiB | 256 MiB | 0 % | 82 MB |
+| Docs | 9 MiB | 128 MiB | 0 % | 89 MB |
+| **Total** | **≈1.05 GiB** | 5.6 GiB | **< 0.1 core** | **≈2.4 GB** |
+
+What this does **not** show, so do not claim it yet:
+
+- **Startup peak and load.** The JVMs (engine, Keycloak) use more memory while starting
+  and under load; the limits above (5.6 GiB in total) are the ceiling the Compose files allow.
+- **Published images.** The GHCR images used by the installer can differ in size from
+  local builds; check them before quoting disk figures for the installer.
+- **x86-64.** Only measured on Apple silicon.
+
+Safe public wording: *"The whole dev stack idles at about 1 GB of RAM; give Docker 4 GB."*
