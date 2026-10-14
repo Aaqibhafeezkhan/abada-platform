@@ -108,7 +108,7 @@ class AiProviderRegistryTest {
         rows.add(row("openrouter", "openrouter", "openrouter-key", "deepseek/,google/gemini-exp", false));
 
         assertThat(registry.resolveForModel("claude-sonnet-5").orElseThrow().id()).isEqualTo("anthropic");
-        assertThat(registry.resolveForModel("deepseek/deepseek-v4-flash-free").orElseThrow().id())
+        assertThat(registry.resolveForModel("deepseek/deepseek-v4-flash").orElseThrow().id())
                 .isEqualTo("openrouter");
         assertThat(registry.resolveForModel("google/gemini-exp-1").orElseThrow().id())
                 .as("longer prefix beats gemini's google/").isEqualTo("openrouter");

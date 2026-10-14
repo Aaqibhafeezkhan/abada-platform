@@ -884,7 +884,7 @@ class AplParserTest {
         assertThatThrownBy(() -> parser.parseDetailed(agentFlow("      fallback_models: [gemini-3.6-flash]\n")))
                 .isInstanceOf(BpmnValidationException.class).hasMessageContaining("more than once");
         assertThatThrownBy(() -> parser.parseDetailed(agentFlow(
-                "      fallback_models: [gemini-3.7-flash, gemini-3.8-flash, gpt-5-mini, deepseek/deepseek-v4-flash-free]\n")))
+                "      fallback_models: [gemini-3.7-flash, gemini-3.8-flash, gpt-5-mini, deepseek/deepseek-v4-flash]\n")))
                 .isInstanceOf(BpmnValidationException.class).hasMessageContaining("more than 3");
     }
 
@@ -1051,7 +1051,7 @@ class AplParserTest {
 
     @Test
     void acceptsModelsOnTheAllowedListAndBlankModels() {
-        for (String model : new String[] { "gemini-3.6-flash", "deepseek/deepseek-v4-flash-free", "gpt-5-mini", " " }) {
+        for (String model : new String[] { "gemini-3.6-flash", "deepseek/deepseek-v4-flash", "gpt-5-mini", " " }) {
             String source = "version: abada.io/v1\n"
                     + "metadata:\n"
                     + "  name: Guarded Flow\n"

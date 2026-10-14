@@ -248,7 +248,7 @@ The engine enforces an operator-defined allow-list of agent model ids. The
 engine rejects an APL document during deployment or authoring validation when
 an agent node declares a `model` outside
 `ABADA_AGENT_ALLOWED_MODELS` (a comma-separated list, default
-`gemini-3.6-flash,gemini-3.7-flash,gemini-3.8-flash,deepseek/deepseek-v4-flash-free,gpt-5-mini`).
+`gemini-3.6-flash,gemini-3.7-flash,gemini-3.8-flash,deepseek/deepseek-v4-flash,gpt-5-mini`).
 Each listed model also needs a configured provider (see the routing rules
 above) before a process using it can start. This makes the
 "cost control" claim local: an operator can restrict which model ids any
