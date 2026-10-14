@@ -83,10 +83,8 @@ The engine never calls tool servers; MCP lives in the worker.
 
 ## M4 — Governed improvement and launch
 
-Full specifications: [`m4-task-specs.md`](m4-task-specs.md). Built and tested on
-`dev`; **not yet published**: the 1.1.0 gate is drafted
-([report](1.1-gate-report-2026-10-14.md)) and awaits the release owner's
-sign-off.
+Full specifications: [`m4-task-specs.md`](m4-task-specs.md). Released as `1.1.0` on
+2026-10-14 ([gate report](1.1-gate-report-2026-10-14.md), signed off).
 
 - [x] E14 Override-rate, confidence-drift, calibration and cost signals (`reviewed_by` link from agent to human node)
 - [x] E15 Replay before approval: in-memory replay on the last N cases, outcome diff, policy can require it (tools are not run; start inputs are recorded from this release)
@@ -94,7 +92,7 @@ sign-off.
 - [x] E17 Schema-driven NL authoring with patch-mode refine
 - [x] E21 Bounded for-each: `for_each` over a list variable with `max_items` and `max_parallel`, each item a governed child process, results gathered in order, a failed item does not fail the others
 - [x] E18 Site: `/investors` page and a claims register checked by the build; demo-video script (the recording and the Astro migration are not done)
-- [ ] E19 1.1.0 gate report, upgrade notes, pilot runbook (`release/1.1.0` carries the version bump, awaiting sign-off): [release notes](../release-notes/1.1.0-release-notes.md), [upgrade section](../operations/upgrading.md), [pilot runbook](../operations/pilot-runbook.md) and the gate report are drafted; the version bump, image build and publication are the release owner's
+- [x] E19 1.1.0 gate report, upgrade notes, pilot runbook: [release notes](../release-notes/1.1.0-release-notes.md), [upgrade section](../operations/upgrading.md), [pilot runbook](../operations/pilot-runbook.md), [gate report](1.1-gate-report-2026-10-14.md); published 2026-10-14
 
 ## Parallel track — design partners
 
