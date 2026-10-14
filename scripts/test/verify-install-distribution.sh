@@ -65,6 +65,17 @@ if [[ "$*" == *"generativelanguage.googleapis.com"* ]]; then
   printf '200'
   exit 0
 fi
+if [[ "$*" == *"/v1/install-event"* ]]; then
+  # The anonymous install report: keep what would have been sent, optionally fail like an unreachable host.
+  data=""
+  while [[ $# -gt 0 ]]; do
+    if [[ "$1" == "--data" ]]; then data="$2"; shift 2; continue; fi
+    shift
+  done
+  printf '%s\n' "$data" >>"${ABADA_TEST_EVENTS:?}"
+  [[ -z "${ABADA_TEST_PING_FAIL:-}" ]] || exit 22
+  exit 0
+fi
 exec "${ABADA_TEST_REAL_CURL:?}" "$@"
 FIXTURE
 chmod +x "$FAKE_BIN/curl"
@@ -153,6 +164,74 @@ ABADA_RELEASE_BASE_URL="file://$PUBLIC_DIR" \
 ABADA_INSTALL_DIR="$EXPLICIT_INSTALL_DIR" \
   bash "$ROOT_DIR/install/install.sh" >/dev/null
 [[ "$(cat "$MARKER")" == "up dev" ]] || { echo "marker mismatch: $(cat "$MARKER" 2>/dev/null || echo '<missing>')" >&2; exit 1; }
+
+
+# --- the anonymous install report ------------------------------------------------
+EVENTS="$TMP_DIR/events"
+ENDPOINT="http://events.test/v1/install-event"
+run_installer() {  # dir, then extra VAR=value settings
+  local dir="$1"; shift
+  env PATH="$FAKE_BIN:$PATH" ABADA_TEST_MARKER="$MARKER" ABADA_TEST_REAL_CURL="$REAL_CURL" \
+    ABADA_TEST_EVENTS="$EVENTS" ABADA_VERSION="$VERSION" ABADA_RELEASE_BASE_URL="file://$PUBLIC_DIR" \
+    ABADA_INSTALL_DIR="$dir" "$@" bash "$ROOT_DIR/install/install.sh"
+}
+
+# A mirror or a test installs without reporting: nothing is sent unless an endpoint is named.
+: >"$EVENTS"
+run_installer "$TMP_DIR/ping-mirror" >"$TMP_DIR/ping-mirror-output" 2>&1
+[[ ! -s "$EVENTS" ]] || { echo "an install from a mirror must not report" >&2; exit 1; }
+if grep -Fq 'anonymous report' "$TMP_DIR/ping-mirror-output"; then echo "the notice must not appear when nothing is sent" >&2; exit 1; fi
+
+# A successful install sends exactly one event with the documented fields and nothing else.
+: >"$EVENTS"
+run_installer "$TMP_DIR/ping-ok" ABADA_USAGE_ENDPOINT="$ENDPOINT" ABADA_LLM_GEMINI_API_KEY="test_gemini_key_1234567890" \
+  >"$TMP_DIR/ping-ok-output" 2>&1
+[[ "$(wc -l <"$EVENTS" | tr -d ' ')" == "1" ]] || { echo "expected exactly one install event" >&2; cat "$EVENTS" >&2; exit 1; }
+EVENT="$(cat "$EVENTS")"
+for expected in '"event":"install_succeeded"' "\"version\":\"$VERSION\"" '"profile":"dev"' '"llm_key_provided":true' '"ci":'; do
+  [[ "$EVENT" == *"$expected"* ]] || { echo "install event lacks $expected: $EVENT" >&2; exit 1; }
+done
+UNLISTED="$(printf '%s' "$EVENT" | tr -d '{}' | tr ',' '\n' | sed -E 's/^"([a-z_]+)":.*/\1/' | \
+  grep -Evx 'event|version|install_id|os|arch|docker_version|profile|duration_s|llm_key_provided|ci|failed_step' || true)"
+[[ -z "$UNLISTED" ]] || { echo "install event carries unlisted fields: $UNLISTED" >&2; exit 1; }
+for secret in test_gemini_key_1234567890 "$TMP_DIR" "$(whoami)" "$(hostname)"; do
+  [[ "$EVENT" != *"$secret"* ]] || { echo "install event leaks a local value: $secret" >&2; exit 1; }
+done
+grep -Fq 'anonymous report' "$TMP_DIR/ping-ok-output" || { echo "the installer must say what it sends" >&2; exit 1; }
+grep -Fq 'ABADA_USAGE_PING=0' "$TMP_DIR/ping-ok-output" || { echo "the installer must say how to opt out" >&2; exit 1; }
+ID_FILE="$TMP_DIR/ping-ok/.abada-install-id"
+[[ -s "$ID_FILE" ]] || { echo "install id not kept" >&2; exit 1; }
+if stat -c '%a' "$ID_FILE" >/dev/null 2>&1; then ID_PERMS="$(stat -c '%a' "$ID_FILE")"; else ID_PERMS="$(stat -f '%Lp' "$ID_FILE")"; fi
+[[ "$ID_PERMS" == "600" ]] || { echo "install id file permissions not 600" >&2; exit 1; }
+FIRST_ID="$(tr -d '\n' <"$ID_FILE")"
+[[ "$EVENT" == *"\"install_id\":\"$FIRST_ID\""* ]] || { echo "event does not carry the kept install id" >&2; exit 1; }
+: >"$EVENTS"
+run_installer "$TMP_DIR/ping-ok" ABADA_USAGE_ENDPOINT="$ENDPOINT" >/dev/null 2>&1
+[[ "$(cat "$EVENTS")" == *"\"install_id\":\"$FIRST_ID\""* ]] || { echo "a reinstall must keep its install id" >&2; exit 1; }
+
+# Every way to opt out sends nothing and prints no notice.
+for optout in ABADA_USAGE_PING=0 ABADA_USAGE_PING=false ABADA_USAGE_PING=no DO_NOT_TRACK=1; do
+  : >"$EVENTS"
+  run_installer "$TMP_DIR/ping-out-${optout//[^A-Za-z0-9]/_}" ABADA_USAGE_ENDPOINT="$ENDPOINT" "$optout" \
+    >"$TMP_DIR/ping-out-output" 2>&1
+  [[ ! -s "$EVENTS" ]] || { echo "$optout must stop the report" >&2; exit 1; }
+  if grep -Fq 'anonymous report' "$TMP_DIR/ping-out-output"; then echo "$optout must stop the notice" >&2; exit 1; fi
+done
+
+# A failed install reports the step that failed, and its exit status is the installer's own.
+: >"$EVENTS"
+if run_installer "$TMP_DIR/ping-fail" ABADA_USAGE_ENDPOINT="$ENDPOINT" ABADA_AGENT_LLM_API_KEY="invalid" \
+  >"$TMP_DIR/ping-fail-output" 2>&1; then
+  echo "an invalid key must still fail the installer" >&2; exit 1
+fi
+[[ "$(cat "$EVENTS")" == *'"event":"install_failed"'* && "$(cat "$EVENTS")" == *'"failed_step":"validate_key"'* ]] || {
+  echo "a failed install must report its failing step: $(cat "$EVENTS")" >&2; exit 1; }
+
+# An unreachable endpoint never changes the outcome of the install.
+: >"$EVENTS"
+run_installer "$TMP_DIR/ping-down" ABADA_USAGE_ENDPOINT="$ENDPOINT" ABADA_TEST_PING_FAIL=1 >/dev/null 2>&1 || {
+  echo "a failing report must not fail the installer" >&2; exit 1; }
+[[ "$(cat "$MARKER")" == "up dev" ]] || { echo "the stack must still start when the report fails" >&2; exit 1; }
 
 # The standalone quickstart shares the same public distribution and checksum
 # contract.

@@ -100,3 +100,6 @@ Claude outputs/
 # Private material kept locally, not published
 submissions/
 prompts/
+
+# Local Wrangler/D1 state (can hold real install events)
+install/worker/.wrangler/
