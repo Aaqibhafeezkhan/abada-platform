@@ -541,8 +541,11 @@ public class AgentStepService {
             String model) {
         if (limits == null) return;
         List<AgentStepEntity> all = steps.findByExternalTaskIdOrderByAttemptAscSequenceAsc(task.getId());
+        // A turn is a model call that answered: a failed call (an unavailable model the worker fell back
+        // from, across deferrals of the same attempt) spends no turn. Its tokens and cost still count below.
         if (limits.maxTurns() != null && all.stream().filter(step -> step.getAttempt() == task.getAttempt()
-                && step.getKind() == Kind.MODEL_CALL).count() >= limits.maxTurns()) {
+                && step.getKind() == Kind.MODEL_CALL && step.getState() == State.COMPLETED).count()
+                >= limits.maxTurns()) {
             throw rejected("TURN_LIMIT", "This attempt reached max_turns (" + limits.maxTurns() + ")");
         }
         if (limits.maxTokensTotal() != null) {

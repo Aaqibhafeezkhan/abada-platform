@@ -117,6 +117,7 @@ export default function InvestorsPage() {
           </div>
         </Section>
 
+        {next.length > 0 ? (
         <Section alt>
           <SectionHead
             eyebrow="Built, not yet published"
@@ -129,6 +130,7 @@ export default function InvestorsPage() {
             ))}
           </div>
         </Section>
+        ) : null}
 
         <Section>
           <SectionHead

@@ -94,7 +94,7 @@ sign-off.
 - [x] E17 Schema-driven NL authoring with patch-mode refine
 - [x] E21 Bounded for-each: `for_each` over a list variable with `max_items` and `max_parallel`, each item a governed child process, results gathered in order, a failed item does not fail the others
 - [x] E18 Site: `/investors` page and a claims register checked by the build; demo-video script (the recording and the Astro migration are not done)
-- [ ] E19 1.1.0 gate report, upgrade notes, pilot runbook: [release notes](../release-notes/1.1.0-release-notes.md), [upgrade section](../operations/upgrading.md), [pilot runbook](../operations/pilot-runbook.md) and the gate report are drafted; the version bump, image build and publication are the release owner's
+- [ ] E19 1.1.0 gate report, upgrade notes, pilot runbook (`release/1.1.0` carries the version bump, awaiting sign-off): [release notes](../release-notes/1.1.0-release-notes.md), [upgrade section](../operations/upgrading.md), [pilot runbook](../operations/pilot-runbook.md) and the gate report are drafted; the version bump, image build and publication are the release owner's
 
 ## Parallel track — design partners
 

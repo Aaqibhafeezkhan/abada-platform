@@ -12,10 +12,13 @@ const READY = [
   "Enforced SLAs and bounded rework loops",
   "Tool-using agents with human-approved writes",
   "Governed child processes and agent delegation",
+  "Override, confidence and cost signals for reviewed agents",
+  "Proposed changes replayed on recorded cases before approval, and one-click rollback",
+  "Bounded for-each over a governed child process",
 ];
 
 const NOT_YET = [
-  "Improvement proposals replayed on real cases (1.1.0)",
+  "Replay of tools, called processes and timers (replays run agent steps only)",
   "Public-cloud certification and independent security review",
   "Full BPMN 2.0 coverage",
 ];

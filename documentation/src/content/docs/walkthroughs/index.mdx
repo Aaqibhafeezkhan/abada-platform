@@ -1,0 +1,66 @@
+---
+title: Walkthroughs
+description: End-to-end scenarios that follow one support case through the Agent Worker, its SDK, MCP tool servers, approvals, delegation, concurrency and a third-party worker — step by step, with the exact calls the engine sees.
+---
+
+import { CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+A walkthrough follows **one concrete case from start to finish** and shows what
+each component does at every step: which HTTP call the worker makes, what the
+engine checks, what PostgreSQL records and what happens when something fails
+halfway.
+
+| If you want to… | Read |
+| --- | --- |
+| build something hands-on in Studio | the tutorials under [Get started](/user/first-workflow/) |
+| understand *how it works* on a concrete case | these walkthroughs |
+| look up the lifecycle, states and guarantees | [Agent Worker execution](/architecture/agent-worker/) |
+| check the normative contract | [Authoritative contracts](/reference/contracts/) |
+
+## The running example
+
+Every walkthrough uses the same support case so that the pieces connect:
+
+- **Alice** (customer `C-42`) writes: *"My parcel never arrived"* (order `5531`).
+- A `triage` **agent** node reads her record from a **CRM tool server**
+  (`crm/get_customer`, a read), opens a ticket (`crm/create_ticket`, a write),
+  and may refund her €89 — either through an **approval-required** tool
+  (`crm/refund`) or by **delegating** to a `refund_payout` process.
+- `refund_payout` pays through a **third-party payments worker** built with the
+  Java SDK.
+
+The names `crm`, `refund_payout` and `payments.payout` are illustrations; the
+mechanics are those of the engine and the first-party worker.
+
+<CardGrid>
+  <LinkCard
+    title="1. The Agent Worker, its SDK, tools and MCP"
+    description="The three layers — SDK, worker, engine — and who is allowed to do what."
+    href="/walkthroughs/agent-worker-and-sdk/"
+  />
+  <LinkCard
+    title="2. A CRM call and back to the engine"
+    description="One read, one keyed write and the final answer, call by call."
+    href="/walkthroughs/tool-call-round-trip/"
+  />
+  <LinkCard
+    title="3. Many instances at once"
+    description="Slots, leases, SKIP LOCKED and what happens when two workers collide."
+    href="/walkthroughs/concurrency/"
+  />
+  <LinkCard
+    title="4. A refund that needs approval"
+    description="approval_required: the agent proposes, a person decides, the exact call runs once."
+    href="/walkthroughs/approval-refund/"
+  />
+  <LinkCard
+    title="5. Delegating to a sub-process"
+    description="The agent starts a governed child process and continues with its declared outputs."
+    href="/walkthroughs/delegation/"
+  />
+  <LinkCard
+    title="6. Writing a third-party worker"
+    description="A payments worker with the Java SDK: fetch, heartbeat, complete, fail, BPMN error."
+    href="/walkthroughs/third-party-worker/"
+  />
+</CardGrid>

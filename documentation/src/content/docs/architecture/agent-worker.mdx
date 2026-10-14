@@ -117,7 +117,8 @@ sequenceDiagram
   the model gives it — it is neither sent nor approved again.
 - **Limits and cost.** `max_turns`, `max_tokens_total` and `budget_usd` are
   checked when a model call is journaled; cost is computed by the engine from
-  the model's price at the time of the call.
+  the model's price at the time of the call. A turn is a model call that
+  answered: an unavailable model the worker fell back from spends none.
 - **Bindings.** Only tools frozen in the definition's bindings may be
   journaled; anything else is refused.
 
@@ -189,3 +190,5 @@ remain optional diagnostics and are never authoritative for correctness.
 - Contract: [agent worker reference](https://github.com/bashizip/abada-platform/blob/dev/docs/reference/agent-worker.md),
   [external-worker protocol v1](https://github.com/bashizip/abada-platform/blob/dev/docs/reference/external-worker-protocol-v1.md)
 - User guide: [Agent nodes and the Agent Worker](/user/agent-worker/)
+- Walkthroughs: [a CRM call, approvals, delegation, concurrency and a
+  third-party worker, step by step](/walkthroughs/)
