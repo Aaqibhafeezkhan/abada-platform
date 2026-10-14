@@ -1115,10 +1115,15 @@ public final class AplParser {
                             + "' must be <server>/<tool>");
                 }
                 if (!ref.contains("/")) {
+                    String message = "agent node '" + nodeId + "' names tool '" + ref + "' without a server: use"
+                            + " <server>/<tool> from a project tool server";
+                    if (enforceDeploymentPolicy) {
+                        // Since 1.1.0 a deployment refuses it. Definitions already deployed reload unchanged.
+                        throw BpmnValidationException.single(new BpmnValidationIssue(TOOL_ADVISORY_CODE,
+                                ValidationSeverity.ERROR, message, null, nodeId, LANGUAGE_VERSION, null, null, field));
+                    }
                     warnings.add(new BpmnValidationIssue(TOOL_ADVISORY_CODE, ValidationSeverity.WARNING,
-                            "agent node '" + nodeId + "' names tool '" + ref + "' without a server: it is"
-                                    + " advisory only and never executed; use <server>/<tool> from a project"
-                                    + " tool server (an error from 1.1.0)",
+                            message + " (advisory only and never executed; refused by new deployments)",
                             null, nodeId, LANGUAGE_VERSION, null, null, nodePointer + "/" + field));
                 }
                 tools.add(ref);
@@ -1202,7 +1207,7 @@ public final class AplParser {
         return new com.abada.engine.core.model.AgentLimits(turns, tokens, budget);
     }
 
-    /** {@code tools:} names without a server (rc.x): advisory, never executed. */
+    /** {@code tools:} names without a server (rc.x): refused by a deployment since 1.1.0, advisory when reloaded. */
     public static final String TOOL_ADVISORY_CODE = "ABADA-APL-TOOL-001";
 
     private static final java.util.regex.Pattern TOOL_REF =

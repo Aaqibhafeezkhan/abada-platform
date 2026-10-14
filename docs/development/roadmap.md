@@ -83,13 +83,18 @@ The engine never calls tool servers; MCP lives in the worker.
 
 ## M4 — Governed improvement and launch
 
-- [ ] E14 Override-rate, confidence-drift and cost signals (`reviewed_by` link from agent to human node)
-- [ ] E15 Replay before approval: sandboxed replay on the last N cases, outcome diff, policy can require it
-- [ ] E16 One-click rollback to a prior immutable version
-- [ ] E17 Schema-driven NL authoring with patch-mode refine
-- [ ] E21 Bounded for-each: `for_each` over a list variable with `max_items` and `max_parallel`; each item a child token (or E20 child process); results gathered into one variable; a failed item routes through `on_error` without failing the others
-- [ ] E18 Static site, `/investors` page, 3-minute video
-- [ ] E19 1.1.0 gate report, upgrade notes, pilot runbook
+Full specifications: [`m4-task-specs.md`](m4-task-specs.md). Built and tested on
+`dev`; **not yet published**: the 1.1.0 gate is drafted
+([report](1.1-gate-report-2026-10-14.md)) and awaits the release owner's
+sign-off.
+
+- [x] E14 Override-rate, confidence-drift, calibration and cost signals (`reviewed_by` link from agent to human node)
+- [x] E15 Replay before approval: in-memory replay on the last N cases, outcome diff, policy can require it (tools are not run; start inputs are recorded from this release)
+- [x] E16 One-click rollback to a prior immutable version (second-approver option deferred)
+- [x] E17 Schema-driven NL authoring with patch-mode refine
+- [x] E21 Bounded for-each: `for_each` over a list variable with `max_items` and `max_parallel`, each item a governed child process, results gathered in order, a failed item does not fail the others
+- [x] E18 Site: `/investors` page and a claims register checked by the build; demo-video script (the recording and the Astro migration are not done)
+- [ ] E19 1.1.0 gate report, upgrade notes, pilot runbook: [release notes](../release-notes/1.1.0-release-notes.md), [upgrade section](../operations/upgrading.md), [pilot runbook](../operations/pilot-runbook.md) and the gate report are drafted; the version bump, image build and publication are the release owner's
 
 ## Parallel track — design partners
 

@@ -477,9 +477,11 @@ to the worker in the agent descriptor as `toolBindings`. Editing a tool server
 later never changes running instances: redeploying makes a new version with the
 new bindings (an unchanged source with changed bindings is a new version).
 
-A name without a server (`web_search`, the rc.x form) is an
-`ABADA-APL-TOOL-001` warning: it is passed to the worker as an advisory name
-and never executed. It becomes an error at 1.1.0.
+A name without a server (`web_search`, the rc.x form) is refused by a
+deployment and by validation with `ABADA-APL-TOOL-001` (an error since 1.1.0;
+it was a warning in the release candidates, where the name was only advisory
+and never executed). A definition deployed by an earlier release keeps
+loading and running unchanged, with the issue reported as a warning.
 
 Tool credentials are managed with `PUT/GET/DELETE
 /v1/projects/{projectId}/tool-credentials/{name}` (owners and maintainers

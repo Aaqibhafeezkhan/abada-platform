@@ -51,11 +51,20 @@ class AplToolReferenceTest {
     }
 
     @Test
-    void aNameWithoutAServerIsAnAdvisoryWarning() {
-        var result = parser.parseDetailed(agentWithTools("""
+    void aNameWithoutAServerIsRefusedByADeploymentAndOnlyAWarningWhenAnOldDefinitionReloads() {
+        // Since 1.1.0 a deployment (and validation) refuses it, at the tool's path.
+        assertThat(errors("""
+                        - web_search
+                """)).singleElement().satisfies(issue -> {
+                    assertThat(issue.code()).isEqualTo(AplParser.TOOL_ADVISORY_CODE);
+                    assertThat(issue.severity()).isEqualTo(ValidationSeverity.ERROR);
+                    assertThat(issue.path()).isEqualTo("/flow/nodes/1/tools/0");
+                });
+        // A definition deployed by an earlier release reloads unchanged, advisory as before.
+        var reloaded = new AplParser("", false).parseDetailed(agentWithTools("""
                         - web_search
                 """));
-        assertThat(result.report().issues())
+        assertThat(reloaded.report().issues())
                 .filteredOn(issue -> AplParser.TOOL_ADVISORY_CODE.equals(issue.code()))
                 .singleElement()
                 .satisfies(issue -> {
@@ -63,6 +72,7 @@ class AplToolReferenceTest {
                     assertThat(issue.elementId()).isEqualTo("triage");
                     assertThat(issue.path()).isEqualTo("/flow/nodes/1/tools/0");
                 });
+        assertThat(reloaded.definition().getServiceTask("triage").agentWork().tools()).containsExactly("web_search");
     }
 
     @Test
@@ -89,7 +99,7 @@ class AplToolReferenceTest {
         assertThat(bound.maxTurns()).isEqualTo(8);
         assertThat(bound.maxTokensTotal()).isEqualTo(50_000L);
         assertThat(bound.budgetUsd()).isNull();
-        var advisory = parser.parse(agentWithTools("        - web_search\n"))
+        var advisory = new AplParser("", false).parse(agentWithTools("        - web_search\n"))
                 .getServiceTask("triage").agentWork().limits();
         assertThat(advisory.maxTokensTotal()).isNull();
 

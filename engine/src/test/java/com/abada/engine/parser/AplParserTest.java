@@ -391,7 +391,7 @@ class AplParserTest {
                         + "      inputs:\n        case: ${case}\n"
                         + "      result_variable: summary\n"
                         + "      output_schema:\n        type: object\n"
-                        + "      tools: [crm.read]\n"
+                        + "      tools: [crm/read]\n"
                         + "      confidence_threshold: 80\n"
                         + "      temperature: 0.1\n"
                         + "      max_tokens: 512\n"
@@ -404,7 +404,7 @@ class AplParserTest {
         assertThat(work.model()).isEqualTo("gemini-3.6-flash");
         assertThat(work.inputs()).containsEntry("case", "${case}");
         assertThat(work.resultVariable()).isEqualTo("summary");
-        assertThat(work.tools()).containsExactly("crm.read");
+        assertThat(work.tools()).containsExactly("crm/read");
         assertThat(work.maxTokens()).isEqualTo(512);
     }
 
