@@ -79,6 +79,10 @@ public class AbadaEngine {
     private final ToolRegistryService toolRegistry;
     private final com.abada.engine.persistence.repository.AgentStepRepository agentSteps;
     private final com.abada.engine.core.delegation.CallTargetService callTargets;
+    private final com.abada.engine.core.replay.StartInputService startInputs;
+    private final com.abada.engine.persistence.repository.ForEachItemRepository forEachItems;
+    private final int maxForEachItems;
+    private final int maxForEachParallel;
     private final com.abada.engine.persistence.repository.ProcessInstanceRepository processInstanceRepository;
     /** Deepest call-process nesting the engine allows (a root instance is depth 0). */
     private final int maxCallDepth;
@@ -122,7 +126,15 @@ public class AbadaEngine {
             com.abada.engine.persistence.repository.ProcessInstanceRepository processInstanceRepository,
             @Value("${abada.call-process.max-depth:4}") int maxCallDepth,
             @Value("${abada.call-process.resume-immediately:true}") boolean resumeChildImmediately,
-            com.abada.engine.security.AesEncryption encryption) {
+            com.abada.engine.security.AesEncryption encryption,
+            com.abada.engine.core.replay.StartInputService startInputs,
+            com.abada.engine.persistence.repository.ForEachItemRepository forEachItems,
+            @Value("${abada.for-each.max-items:100}") int maxForEachItems,
+            @Value("${abada.for-each.max-parallel:20}") int maxForEachParallel) {
+        this.forEachItems = forEachItems;
+        this.maxForEachItems = maxForEachItems;
+        this.maxForEachParallel = maxForEachParallel;
+        this.startInputs = startInputs;
         this.encryption = encryption;
         this.persistenceService = persistenceService;
         this.parser = new BpmnParser();
@@ -426,6 +438,10 @@ public class AbadaEngine {
             started.put("depth", lineage.depth());
         }
         historyService.record("PROCESS_STARTED", instance, definition.getStartEventId(), started);
+        if (lineage == null) {
+            // Root starts only: a child's inputs come from its parent, and replaying the parent replays them.
+            startInputs.record(instance, deployment.getDeploymentId(), initialVariables, Instant.now());
+        }
         recordDecisionTableAudits(instance);
         recordLoopExhaustions(instance);
 
@@ -558,6 +574,12 @@ public class AbadaEngine {
         }
         historyService.record("TASK_COMPLETED", instance, activityId, details);
         recordUserTaskFact(instance, currentTask);
+        if (chosen != null) {
+            for (com.abada.engine.core.model.ReviewedByMeta review : instance.getDefinition().reviewsAt(activityId)) {
+                insightFactWriter.recordAgentReview(instance.getId(), review.agentNode(), activityId,
+                        chosen.name(), review.accept(), Instant.now());
+            }
+        }
         persistRuntimeState(instance);
 
         String completedTokenRef = currentTask.getTokenId() != null ? currentTask.getTokenId() : activityId;
@@ -689,7 +711,12 @@ public class AbadaEngine {
             com.abada.engine.core.model.CallProcessMeta call =
                     instance.getDefinition().getCallProcess(parked.activityId());
             if (call == null || !instance.isWaitingAt(parked.tokenId(), parked.activityId())) continue;
-            startChild(instance, parked.tokenId(), call);
+            com.abada.engine.core.model.ForEachMeta forEach = instance.getDefinition().getForEach(parked.activityId());
+            if (forEach != null) {
+                startForEach(instance, parked.tokenId(), call, forEach);
+            } else {
+                startChild(instance, parked.tokenId(), call);
+            }
         }
     }
 
@@ -895,6 +922,10 @@ public class AbadaEngine {
                     Map.of("childInstanceId", childInstanceId, "reason", "'" + activityId + "' calls no process"));
             return false;
         }
+        com.abada.engine.core.model.ForEachMeta forEach = parent.getDefinition().getForEach(activityId);
+        if (forEach != null) {
+            return forEachChildEnded(parent, child, call, forEach, parentTokenId);
+        }
         if (child.getStatus() != ProcessStatus.COMPLETED) {
             callFailed(parent, parentTokenId, activityId, "CHILD_FAILED", "child " + childInstanceId + " ended "
                     + child.getStatus(), childInstanceId);
@@ -926,6 +957,261 @@ public class AbadaEngine {
         historyService.record("CHILD_COMPLETED", parent, activityId, details);
         armWork(parent, nextTasks);
         return true;
+    }
+
+    /** The error code of a for-each that finished with a failed item; its {@code on_error} may catch it. */
+    public static final String FOR_EACH_ITEM_FAILED = "FOR_EACH_ITEM_FAILED";
+
+    /**
+     * Starts a for-each visit (E21): evaluates the list, refuses it when it is not a list or is longer than the
+     * node's and the engine's limit (before any child exists), records one row per item and starts the first
+     * {@code max_parallel} children. An empty list finishes at once.
+     */
+    private void startForEach(ProcessInstance instance, String tokenId,
+            com.abada.engine.core.model.CallProcessMeta call, com.abada.engine.core.model.ForEachMeta forEach) {
+        Object value;
+        try {
+            value = com.abada.engine.expression.WorkflowExpressions.compile(forEach.itemsExpression())
+                    .evaluate(instance.getVariables());
+        } catch (RuntimeException exception) {
+            callFailed(instance, tokenId, call.id(), "FOR_EACH_ITEMS_INVALID",
+                    "items could not be evaluated: " + exception.getMessage(), null);
+            return;
+        }
+        if (!(value instanceof List<?> list)) {
+            callFailed(instance, tokenId, call.id(), "FOR_EACH_ITEMS_INVALID", "items did not evaluate to a list", null);
+            return;
+        }
+        int limit = Math.min(forEach.maxItems(), maxForEachItems);
+        if (list.size() > limit) {
+            callFailed(instance, tokenId, call.id(), "FOR_EACH_TOO_MANY", "the list has " + list.size()
+                    + " items; the limit is " + limit, null);
+            return;
+        }
+        // A retried visit starts afresh.
+        forEachItems.deleteByParentInstanceIdAndParentTokenId(instance.getId(), tokenId);
+        forEachItems.flush();
+        for (int index = 0; index < list.size(); index++) {
+            com.abada.engine.persistence.entity.ForEachItemEntity row =
+                    new com.abada.engine.persistence.entity.ForEachItemEntity();
+            row.setParentInstanceId(instance.getId());
+            row.setParentTokenId(tokenId);
+            row.setActivityId(call.id());
+            row.setItemIndex(index);
+            try {
+                row.setItemJson(om.writeValueAsString(list.get(index)));
+            } catch (JsonProcessingException exception) {
+                callFailed(instance, tokenId, call.id(), "FOR_EACH_ITEMS_INVALID",
+                        "item " + index + " cannot be handed to a child", null);
+                return;
+            }
+            forEachItems.save(row);
+        }
+        historyService.record("FOR_EACH_STARTED", instance, call.id(), Map.of("items", list.size(),
+                "maxParallel", Math.min(forEach.maxParallel(), maxForEachParallel)));
+        dispatchForEach(instance, tokenId, call, forEach);
+    }
+
+    /** Starts pending items while fewer than {@code max_parallel} run, then finishes the visit if none is left. */
+    private void dispatchForEach(ProcessInstance instance, String tokenId,
+            com.abada.engine.core.model.CallProcessMeta call, com.abada.engine.core.model.ForEachMeta forEach) {
+        List<com.abada.engine.persistence.entity.ForEachItemEntity> rows =
+                forEachItems.findByParentInstanceIdAndParentTokenIdOrderByItemIndex(instance.getId(), tokenId);
+        int parallel = Math.min(forEach.maxParallel(), maxForEachParallel);
+        long running = rows.stream().filter(row -> row.getState()
+                == com.abada.engine.persistence.entity.ForEachItemEntity.State.RUNNING).count();
+        for (com.abada.engine.persistence.entity.ForEachItemEntity row : rows) {
+            if (running >= parallel) break;
+            if (row.getState() != com.abada.engine.persistence.entity.ForEachItemEntity.State.PENDING) continue;
+            startItemChild(instance, tokenId, call, forEach, row);
+            if (row.getState() == com.abada.engine.persistence.entity.ForEachItemEntity.State.RUNNING) running++;
+        }
+        boolean open = rows.stream().anyMatch(row -> row.getState()
+                == com.abada.engine.persistence.entity.ForEachItemEntity.State.PENDING
+                || row.getState() == com.abada.engine.persistence.entity.ForEachItemEntity.State.RUNNING);
+        if (!open) finishForEach(instance, tokenId, call, forEach, rows);
+    }
+
+    /** Starts the child of one item, in the parent's command; an item that cannot start fails alone. */
+    private void startItemChild(ProcessInstance instance, String tokenId,
+            com.abada.engine.core.model.CallProcessMeta call, com.abada.engine.core.model.ForEachMeta forEach,
+            com.abada.engine.persistence.entity.ForEachItemEntity row) {
+        ProcessDefinitionEntity parentDeployment =
+                persistenceService.findProcessDefinitionByDeploymentId(instance.getProcessDefinitionDeploymentId());
+        com.abada.engine.core.delegation.CallTargetService.CallTarget target = parentDeployment == null ? null
+                : callTargets.targetsFor(parentDeployment.getDeploymentId(), parentDeployment.getCallTargets())
+                        .get(call.id());
+        if (target == null) {
+            throw new ProcessEngineException("For-each '" + call.id() + "' of definition '"
+                    + instance.getDefinition().getId() + "' has no pinned target; redeploy the definition");
+        }
+        int depth = instance.getCallDepth() + 1;
+        int limit = call.maxDepth() == null ? maxCallDepth : Math.min(maxCallDepth, call.maxDepth());
+        if (depth > limit) {
+            failItem(instance, row, "CHILD_DEPTH_EXCEEDED");
+            return;
+        }
+        Map<String, Object> inputs = new LinkedHashMap<>();
+        for (Map.Entry<String, String> input : call.inputs().entrySet()) {
+            if (input.getKey().equals(forEach.itemInput())) continue;
+            Object value;
+            try {
+                value = com.abada.engine.expression.WorkflowExpressions.compile(input.getValue())
+                        .evaluate(instance.getVariables());
+            } catch (RuntimeException exception) {
+                failItem(instance, row, "CHILD_INPUT_INVALID");
+                return;
+            }
+            if (!com.abada.engine.core.delegation.CallTargetService.fits(value, target.declaredTypes().get(input.getKey()))) {
+                failItem(instance, row, "CHILD_INPUT_INVALID");
+                return;
+            }
+            inputs.put(input.getKey(), value);
+        }
+        Object item;
+        try {
+            item = row.getItemJson() == null ? null : om.readValue(row.getItemJson(), Object.class);
+        } catch (IOException exception) {
+            failItem(instance, row, "CHILD_INPUT_INVALID");
+            return;
+        }
+        if (!com.abada.engine.core.delegation.CallTargetService.fits(item, target.declaredTypes().get(forEach.itemInput()))) {
+            failItem(instance, row, "CHILD_INPUT_INVALID");
+            return;
+        }
+        inputs.put(forEach.itemInput(), item);
+        ProcessDefinitionEntity childDeployment = persistenceService.findProcessDefinitionByDeploymentId(
+                target.deploymentId());
+        if (childDeployment == null) {
+            throw new ProcessEngineException("Pinned version " + target.version() + " of '" + target.processKey()
+                    + "' no longer exists");
+        }
+        ParsedProcessDefinition childDefinition = cacheDefinition(childDeployment);
+        if (!unconfiguredAgentModels(childDefinition).isEmpty()) {
+            failItem(instance, row, "CHILD_START_REFUSED");
+            return;
+        }
+        // The row names its child before the child can end, so its CHILD_DONE job always finds it.
+        ProcessInstance child = launch(childDeployment, childDefinition, instance.getProjectId(),
+                instance.getStartedBy(), inputs, new ProcessInstance.Lineage(instance.getId(), tokenId, call.id(),
+                        instance.getRootInstanceId(), depth));
+        row.setState(com.abada.engine.persistence.entity.ForEachItemEntity.State.RUNNING);
+        row.setChildInstanceId(child.getId());
+        forEachItems.save(row);
+        historyService.record("CHILD_STARTED", instance, call.id(), Map.of("childInstanceId", child.getId(),
+                "processKey", target.processKey(), "version", target.version(), "itemIndex", row.getItemIndex()));
+    }
+
+    private void failItem(ProcessInstance instance, com.abada.engine.persistence.entity.ForEachItemEntity row,
+            String code) {
+        row.setState(com.abada.engine.persistence.entity.ForEachItemEntity.State.FAILED);
+        row.setErrorCode(code);
+        row.setFinishedAt(Instant.now());
+        forEachItems.save(row);
+        historyService.record("FOR_EACH_ITEM_DONE", instance, row.getActivityId(),
+                Map.of("itemIndex", row.getItemIndex(), "ok", false, "code", code));
+    }
+
+    /**
+     * One item's child ended (a CHILD_DONE job; the parent is locked): record what it returned or why it
+     * failed, start the next pending item, and finish the visit when every item has settled. A child already
+     * recorded is ignored, so a repeated job changes nothing.
+     */
+    private boolean forEachChildEnded(ProcessInstance parent, ProcessInstance child,
+            com.abada.engine.core.model.CallProcessMeta call, com.abada.engine.core.model.ForEachMeta forEach,
+            String tokenId) {
+        com.abada.engine.persistence.entity.ForEachItemEntity row =
+                forEachItems.findByChildInstanceId(child.getId()).orElse(null);
+        if (row == null || row.getState() != com.abada.engine.persistence.entity.ForEachItemEntity.State.RUNNING) {
+            historyService.record("CHILD_RESULT_IGNORED", parent, call.id(),
+                    Map.of("childInstanceId", child.getId(), "reason", "its item is already recorded"));
+            return false;
+        }
+        if (child.getStatus() == ProcessStatus.COMPLETED) {
+            Map<String, Object> outputs = new LinkedHashMap<>();
+            for (Map.Entry<String, String> output : call.outputs().entrySet()) {
+                outputs.put(output.getKey(), child.getVariables().get(output.getValue()));
+            }
+            row.setState(com.abada.engine.persistence.entity.ForEachItemEntity.State.DONE);
+            try {
+                row.setOutputsJson(om.writeValueAsString(outputs));
+            } catch (JsonProcessingException exception) {
+                row.setState(com.abada.engine.persistence.entity.ForEachItemEntity.State.FAILED);
+                row.setErrorCode("CHILD_OUTPUT_INVALID");
+            }
+        } else {
+            row.setState(com.abada.engine.persistence.entity.ForEachItemEntity.State.FAILED);
+            row.setErrorCode("CHILD_" + child.getStatus());
+        }
+        row.setFinishedAt(Instant.now());
+        forEachItems.save(row);
+        historyService.record("FOR_EACH_ITEM_DONE", parent, call.id(), Map.of("itemIndex", row.getItemIndex(),
+                "ok", row.getState() == com.abada.engine.persistence.entity.ForEachItemEntity.State.DONE,
+                "childInstanceId", child.getId()));
+        dispatchForEach(parent, tokenId, call, forEach);
+        return true;
+    }
+
+    /**
+     * Every item has settled: the results go to the node's variable in item order, and the token moves on, or
+     * leaves through {@code on_error} once if any item failed. The other items always ran to the end first.
+     */
+    private void finishForEach(ProcessInstance instance, String tokenId,
+            com.abada.engine.core.model.CallProcessMeta call, com.abada.engine.core.model.ForEachMeta forEach,
+            List<com.abada.engine.persistence.entity.ForEachItemEntity> rows) {
+        List<Map<String, Object>> results = new ArrayList<>();
+        int failed = 0;
+        for (com.abada.engine.persistence.entity.ForEachItemEntity row : rows) {
+            Map<String, Object> entry = new LinkedHashMap<>();
+            entry.put("index", row.getItemIndex());
+            boolean ok = row.getState() == com.abada.engine.persistence.entity.ForEachItemEntity.State.DONE;
+            entry.put("ok", ok);
+            if (ok) {
+                entry.put("outputs", readMap(row.getOutputsJson()));
+            } else {
+                failed++;
+                entry.put("error", row.getErrorCode());
+            }
+            results.add(entry);
+        }
+        Map<String, Object> details = new LinkedHashMap<>();
+        details.put("items", rows.size());
+        details.put("failed", failed);
+        historyService.record("FOR_EACH_COMPLETED", instance, call.id(), details);
+        Map<String, Object> variables = new LinkedHashMap<>();
+        variables.put(forEach.resultsVariable(), results);
+        if (failed > 0) {
+            BoundaryMeta boundary = instance.getDefinition().boundaryFor(call.id(), BoundaryMeta.Kind.ERROR,
+                    FOR_EACH_ITEM_FAILED);
+            if (boundary != null && !instance.isSuspended()) {
+                variables.put(AplParser.outcomeVariable(call.id()), AplParser.OUTCOME_ERROR);
+                variables.put(AplParser.errorCodeVariable(call.id()), FOR_EACH_ITEM_FAILED);
+                leaveViaBoundary(instance, tokenId, boundary, variables, details);
+                return;
+            }
+            instance.putAllVariables(variables);
+            retireTaskJobs(instance, tokenId);
+            instance.stopAtIncident(tokenId);
+            persistRuntimeState(instance);
+            incidentService.open(instance, tokenId, call.id(), IncidentEntity.Type.CHILD_FAILED,
+                    "for-each at '" + call.id() + "' finished with " + failed + " failed of " + rows.size()
+                            + " items (" + FOR_EACH_ITEM_FAILED + ")");
+            return;
+        }
+        variables.put(AplParser.outcomeVariable(call.id()), AplParser.OUTCOME_OK);
+        if (instance.getVariables().containsKey(AplParser.errorCodeVariable(call.id()))) {
+            variables.put(AplParser.errorCodeVariable(call.id()), null);
+        }
+        instance.putAllVariables(variables);
+        retireTaskJobs(instance, tokenId);
+        List<UserTaskPayload> nextTasks = instance.advance(tokenId);
+        recordDecisionTableAudits(instance);
+        recordLoopExhaustions(instance);
+        if (instance.isCompleted() && instance.getEndDate() == null) {
+            instance.setEndDate(Instant.now());
+        }
+        persistRuntimeState(instance);
+        armWork(instance, nextTasks);
     }
 
     /**
@@ -1666,6 +1952,8 @@ public class AbadaEngine {
      */
     private void retireWork(ProcessInstance instance, Set<String> tokenIds) {
         cancelChildren(instance.getId(), tokenIds, "the calling step left through a boundary");
+        // Items not started yet have nothing to run for a token that has left its for-each.
+        for (String tokenId : tokenIds) forEachItems.deleteByParentInstanceIdAndParentTokenId(instance.getId(), tokenId);
         cancelJobs(jobRepository.findPendingForTokensSkipLocked(instance.getId(), tokenIds));
         for (String tokenId : tokenIds) {
             cancelExternalTasks(externalTaskRepository.findByTokenAndStatusInForUpdate(instance.getId(), tokenId,
@@ -2198,6 +2486,7 @@ public class AbadaEngine {
         entity.setCompilerVersion(schema == DefinitionSchema.APL_NATIVE ? "apl-1" : "1");
         entity.setToolBindings(toolBindings);
         entity.setCallTargets(pinnedCalls);
+        entity.setDeployedBy(IdentityContext.get().map(Identity::username).orElse(null));
         try {
             entity.setCompatibilityReport(om.writeValueAsString(parseResult.report()));
         } catch (JsonProcessingException exception) {

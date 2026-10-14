@@ -138,10 +138,61 @@ administration does not bypass this product-authoring boundary.
 
 The response contains a review-only `aplSource`, `provider` (`LLM` or
 `LOCAL_FALLBACK`), optional `model`, `attempts`, and non-sensitive `warnings`.
-The Engine validates every result with `AplParser`, retries an invalid model
-candidate at most twice, and returns a deterministic valid starter if the
-OpenAI-compatible provider is absent or unavailable. This endpoint never
-persists or deploys its candidate; Studio requires an explicit Apply action.
+
+The model is told about APL from the language's own JSON Schema, so the node
+types and fields it knows are exactly the ones the engine accepts.
+
+- **`CREATE`** asks for a whole document. The Engine validates it with
+  `AplParser`, retries an invalid candidate at most twice, feeding back each
+  problem's path and message, and returns a deterministic valid starter if the
+  provider is absent or unavailable.
+- **`REFINE`** works as a **patch**: the model answers with a short list of
+  operations (`addNode`, `removeNode`, `updateNode`, `setEntry`) and a one-
+  sentence `summary`; the Engine applies them, validates the result and repairs
+  at most twice. Nodes the operations do not name are left exactly as they were,
+  and a node cannot be renamed by a patch. The response adds `summary` and
+  `patch` (the operations applied). Re-serialising the document drops YAML
+  comments. With no model configured, or when no valid patch comes back, the
+  endpoint returns `409` instead of a starter: a refinement is never faked.
+
+This endpoint never persists or deploys its candidate; Studio shows the nodes
+it added, changed or removed and requires an explicit Apply action.
+
+## Version history and rollback
+
+- `GET /api/v1/projects/{projectId}/processes/{key}/versions` lists versions newest
+  first: version, deployment id, checksum, deployer, time, `origin`
+  (`DEPLOY`, `ROLLBACK`, `INSIGHT`), `rollbackOf`, the rollback comment, the
+  Insight proposal that adopted it, running instances and whether it is current.
+- `GET .../versions/{from}/diff/{to}` returns a unified source diff
+  (`identical`, `tooLarge`, `unified`).
+- `POST .../versions/{version}/rollback` with `{ "comment", "expectedLatest" }`
+  deploys that version's source as the next version and returns the new
+  definition. `comment` is required (at most 1000 characters). Errors: `400`
+  without a comment or with a dependency that no longer resolves (typed
+  deployment errors), `404`, `409` for a stale `expectedLatest` or a version that
+  is already current.
+
+Reading needs any project role; rolling back needs project `OPERATOR`,
+`MAINTAINER` or `OWNER` and the deployment authority (`process:deploy`,
+`process:control`, the deployer or process-controller group, or an administrator).
+See [runtime semantics](runtime-semantics.md#rollback).
+
+## Replay of a proposal
+
+Under `/api/v1/projects/{projectId}/insight/proposals/{proposalId}/replays`:
+
+- `POST` with `{ "cases", "budgetUsd" }` (both optional) selects the cases and
+  returns a `PLANNED` run with an estimated cost; nothing is spent. One active
+  run per proposal; only a proposal under review can be replayed.
+- `POST .../{runId}/start` starts it; `POST .../{runId}/cancel` stops it.
+- `GET` lists the proposal's runs; `GET .../{runId}` returns the run with its
+  aggregate and cases (state, reason, first divergence, original and replayed
+  path, tools skipped, cost).
+
+Policy: `PUT .../insight/policies/{key}` accepts `replayRequired` and
+`replayMinCases`; an approval that the policy refuses returns `409` with code
+`REPLAY_REQUIRED`. See [Insight loop](insight-loop.md#replay-before-approval).
 
 ## Project event stream
 

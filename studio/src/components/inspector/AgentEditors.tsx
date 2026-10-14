@@ -163,3 +163,35 @@ export const CallProcessEditor: React.FC<{
     </div>
   );
 };
+
+/**
+ * The review step that checks an agent's output (`reviewed_by`, E14) and the outcome that keeps it. Any other
+ * outcome counts as an override in Insight. Metadata only: routing is unchanged.
+ */
+export const ReviewedByEditor: React.FC<{
+  reviewers: { id: string; label: string; outcomes: string[] }[];
+  value: { node: string; accept: string } | undefined;
+  onChange: (value: { node: string; accept: string } | undefined) => void;
+}> = ({ reviewers, value, onChange }) => {
+  const chosen = reviewers.find((reviewer) => reviewer.id === value?.node);
+  return (
+    <div className="space-y-1.5">
+      <label className={LABEL}>Reviewed by — lets Insight count how often people overrule this agent</label>
+      <div className="grid grid-cols-2 gap-2">
+        <select aria-label="Review step" className={FIELD} value={value?.node ?? ''}
+          onChange={(event) => {
+            const reviewer = reviewers.find((candidate) => candidate.id === event.target.value);
+            onChange(reviewer ? { node: reviewer.id, accept: reviewer.outcomes[0] } : undefined);
+          }}>
+          <option value="">No review step</option>
+          {reviewers.map((reviewer) => <option key={reviewer.id} value={reviewer.id}>{reviewer.label}</option>)}
+        </select>
+        <select aria-label="Accepting outcome" className={FIELD} value={value?.accept ?? ''} disabled={!chosen}
+          onChange={(event) => value && onChange({ node: value.node, accept: event.target.value })}>
+          {(chosen?.outcomes ?? []).map((outcome) => <option key={outcome} value={outcome}>{outcome}</option>)}
+        </select>
+      </div>
+      {value && !chosen && <p className={ERROR}>"{value.node}" is not a review step with outcomes.</p>}
+    </div>
+  );
+};

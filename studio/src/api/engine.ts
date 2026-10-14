@@ -222,6 +222,29 @@ export interface EngineInfoResponse {
 export type IncidentKind = 'WORK_FAILED' | 'LOOP_EXHAUSTED' | 'MISSING_CORRELATION_KEY' | 'TOOL_OUTCOME_UNKNOWN';
 
 /** An operator-visible runtime incident (`GET /v1/projects/{projectId}/incidents`). */
+export interface DefinitionVersionDTO {
+  version: number;
+  deploymentId: string;
+  checksum: string;
+  schemaType: string;
+  createdAt: string;
+  deployedBy: string | null;
+  origin: 'DEPLOY' | 'ROLLBACK' | 'INSIGHT';
+  rollbackOf: number | null;
+  proposalId: number | null;
+  comment: string | null;
+  runningInstances: number;
+  current: boolean;
+}
+
+export interface VersionDiffDTO {
+  from: number;
+  to: number;
+  identical: boolean;
+  tooLarge: boolean;
+  unified: string | null;
+}
+
 export interface IncidentDTO {
   id: string;
   projectId: string;
@@ -427,6 +450,37 @@ export class EngineAPI {
     const res = await authenticatedFetch(
       `${this.BASE_URL}/projects/${projectId}/instances/${encodeURIComponent(instanceId)}/lineage`,
       { headers: this.getHeaders() },
+    );
+    if (!res.ok) throw await apiError(res);
+    return res.json();
+  }
+
+  /** Version history of a process, newest first (E16). */
+  static async getVersions(projectId: string, processKey: string): Promise<DefinitionVersionDTO[]> {
+    const res = await authenticatedFetch(
+      `${this.BASE_URL}/projects/${projectId}/processes/${encodeURIComponent(processKey)}/versions`,
+      { headers: this.getHeaders() },
+    );
+    if (!res.ok) throw await apiError(res);
+    return res.json();
+  }
+
+  /** Unified source diff between two versions. */
+  static async getVersionDiff(projectId: string, processKey: string, from: number, to: number): Promise<VersionDiffDTO> {
+    const res = await authenticatedFetch(
+      `${this.BASE_URL}/projects/${projectId}/processes/${encodeURIComponent(processKey)}/versions/${from}/diff/${to}`,
+      { headers: this.getHeaders() },
+    );
+    if (!res.ok) throw await apiError(res);
+    return res.json();
+  }
+
+  /** Deploys an earlier version's source as the next version; running instances are untouched. */
+  static async rollbackProcess(projectId: string, processKey: string, version: number, comment: string,
+    expectedLatest?: number): Promise<ProcessDefinitionDTO> {
+    const res = await authenticatedFetch(
+      `${this.BASE_URL}/projects/${projectId}/processes/${encodeURIComponent(processKey)}/versions/${version}/rollback`,
+      { method: 'POST', headers: this.getHeaders(), body: JSON.stringify({ comment, expectedLatest }) },
     );
     if (!res.ok) throw await apiError(res);
     return res.json();

@@ -467,6 +467,7 @@ public class ExternalTaskCommandService {
             if (verdict.reason() != null) details.put("outcomeReason", verdict.reason());
             history.record("EXTERNAL_TASK_COMPLETED", requireInstance(task), activityId, details);
             recordExternalTaskFact(task, verdict.ok());
+            if (verdict.ok()) recordAgentFact(task, instance, activityId, work, verdict.confidence(), agent);
             return;
         }
 
@@ -619,6 +620,17 @@ public class ExternalTaskCommandService {
         task.setAttemptCostUsd(task.getAttemptCostUsd() == null ? cost.usd() : task.getAttemptCostUsd().add(cost.usd()));
         ProcessInstance instance = engine.getProcessInstanceById(task.getProcessInstanceId());
         metrics.recordAgentCost(instance == null ? null : instance.getDefinition().getId(), agent.model(), cost.usd());
+    }
+
+    /** The agent visit for the E14 signals: confidence, model and priced cost, plus the declared reviewer. */
+    private void recordAgentFact(ExternalTaskEntity task, ProcessInstance instance, String activityId,
+            AgentWorkDescriptor work, Double confidence, AgentAttemptMetadata agent) {
+        com.abada.engine.core.model.ReviewedByMeta review = instance.getDefinition().getReviewOf(activityId);
+        String model = agent != null && agent.model() != null ? agent.model() : work.model();
+        insightFactWriter.recordAgentVisit(instance.getProjectId(), task.getId(), instance.getDefinition().getId(),
+                instance.getProcessDefinitionDeploymentId(), task.getProcessInstanceId(), activityId, model,
+                confidence, task.getAttemptCostUsd(), task.isAttemptCostUnpriced(),
+                review == null ? null : review.reviewNode(), Instant.now());
     }
 
     /** Terminal fact for the analyzed signal; skips legacy rows without a known start. */

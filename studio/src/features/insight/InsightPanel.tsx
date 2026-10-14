@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Sparkles, Loader2, CheckCircle2, XCircle, Brain } from 'lucide-react';
 import { InsightAPI, InsightProposalSummary, InsightProposalDetail } from '@/api/insight';
+import { ReplayPanel } from './ReplayPanel';
 import { useToast } from '@/components/ToastContext';
 
 interface InsightPanelProps {
@@ -170,6 +171,11 @@ export const InsightPanel: React.FC<InsightPanelProps> = ({ projectId }) => {
                     {selectedProposal.proposedSource}
                   </pre>
                 </div>
+              )}
+
+              {projectId && (
+                <ReplayPanel key={selectedProposal.id} projectId={projectId} proposalId={selectedProposal.id}
+                  open={['DRAFT', 'IN_REVIEW'].includes(selectedProposal.status)} canRun />
               )}
 
               {['DRAFT', 'IN_REVIEW'].includes(selectedProposal.status) && (

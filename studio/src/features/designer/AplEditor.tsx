@@ -1,3 +1,4 @@
+import type { NodeChange } from '@/lib/apl/nodeChanges';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AlertCircle, AlertTriangle, CheckCircle2, Code2, Loader2, Minus, Plus, RotateCcw, Type, X } from 'lucide-react';
 import { AplAPI, type AplValidationIssue, type AplValidationResult } from '@/api/apl';
@@ -14,6 +15,9 @@ interface AplEditorProps {
     model?: string;
     attempts: number;
     warnings: string[];
+    /** For a refinement: what the model says it changed, and the nodes it added, changed or removed. */
+    summary?: string;
+    changes?: NodeChange[];
   };
   onApply: (workflow: WorkflowFile) => void;
   onDiscard?: () => void;
@@ -327,6 +331,24 @@ export const AplEditor: React.FC<AplEditorProps> = ({ workflow, initialSource, c
         </ul>
       )}
 
+      {candidate?.summary && (
+        <div aria-label="Proposed change" className="border-t border-[#3A322E] bg-[#211C19] px-4 py-2 text-[11px] text-[#EAE3D9]">
+          <p>{candidate.summary}</p>
+          {candidate.changes && (
+            <ul className="mt-1 flex flex-wrap gap-1.5">
+              {candidate.changes.length === 0 && <li className="text-[#A89F91]">No node changed.</li>}
+              {candidate.changes.map((change) => (
+                <li key={`${change.kind}-${change.id}`}
+                  className={`rounded border px-1.5 py-0.5 font-mono ${change.kind === 'added'
+                    ? 'border-[#2A9D8F]/40 text-[#2A9D8F]' : change.kind === 'removed'
+                      ? 'border-[#E76F51]/40 text-[#E76F51]' : 'border-[#F4A261]/40 text-[#F4A261]'}`}>
+                  {change.kind} {change.id}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
       <div className="h-10 px-4 border-t border-[#3A322E] flex items-center gap-3 text-[11px]">
         {error ? <span className="text-[#E76F51] flex items-center gap-1.5"><AlertCircle className="w-3.5 h-3.5" />{error}</span>
           : check.state === 'checking' ? <span className="text-[#A89F91] flex items-center gap-1.5"><Loader2 className="w-3.5 h-3.5 animate-spin" />Validating with the engine…</span>

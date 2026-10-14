@@ -25,10 +25,13 @@ public class InsightProposalGenerator {
 
     private final AplParser aplParser;
     private final OpenAiCompatibleLlmClient llm;
+    private final com.abada.engine.authoring.AplAuthoringService authoring;
 
-    public InsightProposalGenerator(OpenAiCompatibleLlmClient llm, AplParser aplParser) {
+    public InsightProposalGenerator(OpenAiCompatibleLlmClient llm, AplParser aplParser,
+            com.abada.engine.authoring.AplAuthoringService authoring) {
         this.llm = llm;
         this.aplParser = aplParser;
+        this.authoring = authoring;
     }
 
     public record Proposal(String proposedSource, String rationale, String provider) {}
@@ -36,16 +39,16 @@ public class InsightProposalGenerator {
     public Proposal generate(String definitionKey, String targetSource, List<Finding> findings) {
         if (llm.isConfigured()) {
             try {
-                String suggested = requestLlm(definitionKey, targetSource, findings);
-                if (isValidSuggestion(definitionKey, suggested)) {
-                    return new Proposal(suggested,
-                            rationale(findings) + " (suggested by LLM)", "llm");
+                // A patch, so the proposal's diff is as small as the finding that caused it.
+                var candidate = authoring.generate(null, com.abada.engine.authoring.AplAuthoringService.Mode.REFINE,
+                        requestFor(findings), targetSource);
+                if (isValidSuggestion(definitionKey, candidate.aplSource())) {
+                    return new Proposal(candidate.aplSource(), rationale(findings) + " (suggested by LLM"
+                            + (candidate.summary() == null ? "" : ": " + candidate.summary()) + ")", "llm");
                 }
-                log.warn("LLM proposal for '{}' was discarded: invalid or changed process id",
-                        definitionKey);
+                log.warn("LLM proposal for '{}' was discarded: invalid or changed process id", definitionKey);
             } catch (Exception exception) {
-                log.warn("LLM proposal generation failed for '{}': {}", definitionKey,
-                        exception.getMessage());
+                log.warn("LLM proposal generation failed for '{}': {}", definitionKey, exception.getMessage());
             }
         }
         String annotated = ruleBasedWithFindings(targetSource, findings);
@@ -85,28 +88,13 @@ public class InsightProposalGenerator {
         }
     }
 
-    private String requestLlm(String definitionKey, String targetSource, List<Finding> findings)
-            throws Exception {
-        String prompt = """
-                Rewrite the abada.io/v1 APL definition below so that the following \\
-                findings on the current running version are addressed:
-                %s
-
-                Requirements:
-                - Keep the process id "%s" EXACTLY as it is.
-                - Preserve all existing node ids unless the change requires adding nodes.
-                - Output ONLY the complete YAML document (no commentary, no markdown fence).
-                - Prefer minimal structural change; embed a "#" comment above each changed node
-                  explaining the change.
-                - Never introduce BPMN constructs outside the supported abada.io/v1 subset
-                  (service tasks, decisions, user tasks, exclusive parallels, events, timer
-                  candidates, external tasks).
-
-                Definition to optimize:
-                %s""".formatted(fullBlock(findings), definitionKey, targetSource);
-
-        return llm.complete("You are the Abada Insight Engine, an APL optimization specialist. "
-                + "You emit only valid abada.io/v1 YAML.", prompt);
+    /** What the proposal is asked to do, in the words of the refinement endpoint. */
+    private String requestFor(List<Finding> findings) {
+        return "Change the process so that these findings on the running version are addressed:\n"
+                + fullBlock(findings)
+                + "\nMake the smallest change that addresses them. For OVERRIDE_RATE, CALIBRATION_GAP, "
+                + "CONFIDENCE_DRIFT and COST_PER_CASE the node is an agent: adjust only its prompt, "
+                + "confidence_threshold, model or output_schema, and keep its reviewed_by and routing as they are.";
     }
 
     private String fullBlock(List<Finding> findings) {

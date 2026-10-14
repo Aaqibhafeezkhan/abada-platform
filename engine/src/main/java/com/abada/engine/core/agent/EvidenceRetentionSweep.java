@@ -34,14 +34,20 @@ public class EvidenceRetentionSweep {
     private static final List<ExternalTaskEntity.Status> FINISHED = List.of(ExternalTaskEntity.Status.COMPLETED,
             ExternalTaskEntity.Status.CANCELLED, ExternalTaskEntity.Status.BPMN_ERROR);
 
-    public record Result(int purged, int workingCopiesCleared) {}
+    public record Result(int purged, int workingCopiesCleared, int startInputsPurged) {}
 
     private final AgentStepRepository steps;
     private final ActivityHistoryService history;
     private final TransactionTemplate transactions;
+    private final com.abada.engine.persistence.repository.ProcessStartInputRepository startInputs;
+    private final com.abada.engine.persistence.repository.ReplayRunRepository replayRuns;
 
     public EvidenceRetentionSweep(AgentStepRepository steps, ActivityHistoryService history,
-            TransactionTemplate transactions) {
+            TransactionTemplate transactions,
+            com.abada.engine.persistence.repository.ProcessStartInputRepository startInputs,
+            com.abada.engine.persistence.repository.ReplayRunRepository replayRuns) {
+        this.replayRuns = replayRuns;
+        this.startInputs = startInputs;
         this.steps = steps;
         this.history = history;
         this.transactions = transactions;
@@ -51,9 +57,9 @@ public class EvidenceRetentionSweep {
             initialDelayString = "${abada.evidence.purge-initial-delay-ms:120000}")
     public void scheduledSweep() {
         Result result = sweep(Instant.now());
-        if (result.purged() > 0 || result.workingCopiesCleared() > 0) {
-            log.info("evidence_sweep purged={} working_copies_cleared={}", result.purged(),
-                    result.workingCopiesCleared());
+        if (result.purged() > 0 || result.workingCopiesCleared() > 0 || result.startInputsPurged() > 0) {
+            log.info("evidence_sweep purged={} working_copies_cleared={} start_inputs_purged={}", result.purged(),
+                    result.workingCopiesCleared(), result.startInputsPurged());
         }
     }
 
@@ -70,7 +76,11 @@ public class EvidenceRetentionSweep {
             batch = transactions.execute(status -> clearWorkingCopies());
             cleared += batch;
         } while (batch == BATCH);
-        return new Result(purged, cleared);
+        // Start inputs kept for replay (E15) follow the same retention.
+        int inputs = transactions.execute(status -> startInputs.purgeDue(now));
+        // Finished replays are kept for the same retention; their cases go with them.
+        transactions.executeWithoutResult(status -> replayRuns.deleteDue(now));
+        return new Result(purged, cleared, inputs);
     }
 
     private int purgeBatch(Instant now) {

@@ -509,6 +509,56 @@ describe('APL round trip: agent delegates', () => {
   });
 });
 
+describe('APL round trip: for-each', () => {
+  it('keeps a for-each node and its bounds through a save', () => {
+    const document: APLDocument = {
+      version: 'abada.io/v1',
+      metadata: { key: 'kyc', name: 'KYC' },
+      flow: {
+        entry: 'start',
+        nodes: [
+          { id: 'start', type: 'webhook', next: 'check_each' },
+          {
+            id: 'check_each', type: 'for-each', items: 'documents', process: 'document_check', item_input: 'document',
+            inputs: { case_id: 'case_id' }, outputs: { verdict: 'verdict' }, max_items: 50, max_parallel: 5,
+            results: 'check_results', on_error: 'manual', next: 'done',
+          },
+          { id: 'manual', type: 'human-input', assignees: ['ops'], next: 'done' },
+          { id: 'done', type: 'end' },
+        ],
+      },
+    };
+    const saved = workflowToAPL(aplToWorkflow(document)).flow.nodes.find((node) => node.id === 'check_each');
+    expect(saved).toMatchObject({
+      type: 'for-each', items: 'documents', process: 'document_check', item_input: 'document',
+      inputs: { case_id: 'case_id' }, outputs: { verdict: 'verdict' }, max_items: 50, max_parallel: 5,
+      results: 'check_results', on_error: 'manual', next: 'done',
+    });
+  });
+});
+
+describe('APL round trip: agent reviewed_by', () => {
+  it('keeps the review step an agent is checked by through a save', () => {
+    const document: APLDocument = {
+      version: 'abada.io/v1',
+      metadata: { key: 'desk', name: 'Desk' },
+      flow: {
+        entry: 'start',
+        nodes: [
+          { id: 'start', type: 'webhook', next: 'draft' },
+          { id: 'draft', type: 'agent', model: 'gemini-3.6-flash', prompt: 'Draft',
+            reviewed_by: { node: 'review', accept: 'approve' }, next: 'review' },
+          { id: 'review', type: 'human-input', assignees: ['reviewers'],
+            outcomes: { approve: { next: 'done' }, reject: { next: 'draft', comment: 'required' } } },
+          { id: 'done', type: 'end' },
+        ],
+      },
+    };
+    const saved = workflowToAPL(aplToWorkflow(document)).flow.nodes.find((node) => node.id === 'draft');
+    expect(saved).toMatchObject({ reviewed_by: { node: 'review', accept: 'approve' }, next: 'review' });
+  });
+});
+
 describe('APL round trip: agent limits and clearing edited fields', () => {
   const document = (): APLDocument => ({
     version: 'abada.io/v1',

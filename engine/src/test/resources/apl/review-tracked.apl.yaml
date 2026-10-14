@@ -1,0 +1,34 @@
+version: abada.io/v1
+metadata:
+  key: review_tracked
+  name: Reviewed agent
+flow:
+  entry: request
+  nodes:
+    - id: request
+      type: webhook
+      next: draft
+    - id: draft
+      type: agent
+      description: Draft the offer
+      model: gemini-3.6-flash
+      prompt: "Draft the offer. Feedback: ${review_comment}"
+      reviewed_by: { node: review, accept: approve }
+      loop:
+        max_iterations: 3
+        on_exhausted: escalate
+      next: review
+    - id: review
+      type: human-input
+      description: Review the draft
+      assignees: [reviewers]
+      outcomes:
+        approve: { next: done }
+        reject: { next: draft, comment: required }
+    - id: escalate
+      type: human-input
+      description: Manager decides
+      assignees: [managers]
+      next: done
+    - id: done
+      type: end

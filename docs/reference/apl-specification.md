@@ -477,9 +477,11 @@ to the worker in the agent descriptor as `toolBindings`. Editing a tool server
 later never changes running instances: redeploying makes a new version with the
 new bindings (an unchanged source with changed bindings is a new version).
 
-A name without a server (`web_search`, the rc.x form) is an
-`ABADA-APL-TOOL-001` warning: it is passed to the worker as an advisory name
-and never executed. It becomes an error at 1.1.0.
+A name without a server (`web_search`, the rc.x form) is refused by a
+deployment and by validation with `ABADA-APL-TOOL-001` (an error since 1.1.0;
+it was a warning in the release candidates, where the name was only advisory
+and never executed). A definition deployed by an earlier release keeps
+loading and running unchanged, with the issue reported as a warning.
 
 Tool credentials are managed with `PUT/GET/DELETE
 /v1/projects/{projectId}/tool-credentials/{name}` (owners and maintainers
@@ -567,6 +569,15 @@ model price in effect at the time of the call (`/v1/model-prices`, effective-
 dated, USD per million tokens). A call with tokens but no price is
 **unpriced** (cost unknown, never 0). Instances carry `agentCost` (USD, tokens,
 `includesUnpriced`).
+
+#### 3.2.4 Agent review
+
+`reviewed_by: { node, accept }` names the `human-input` node that checks the
+agent's output and the outcome that keeps it. It is metadata for the Insight
+loop (override rate, confidence calibration) and changes no routing. The node
+must exist, declare `outcomes`, be reachable from the agent and have `accept`
+among them; otherwise deployment fails with `ABADA-APL-REVIEW-001` at
+`/flow/nodes/<i>/reviewed_by`.
 
 #### 3.2.3 Agent delegation
 
@@ -976,6 +987,15 @@ The `decision-table` node is the YAML surface of the native
 `abada:decisionTable` extension executed in-transaction — the deterministic
 wall constraining agents. This section is the ADR-002 contract expressed in
 APL.
+
+### 3.16 `for-each` — a governed child per item
+
+`for-each` runs the child of a [`call-process`](#315-call-process--governed-child-process) once per item of a
+list (`items`), `max_parallel` at a time, and writes one result per item, in order, to `results`. `max_items`,
+`item_input` and `results` are required and the list is never unbounded: it is capped by `max_items` (at most
+1000) and by the engine's own `abada.for-each.max-items`. An item that fails does not stop the others; the node's
+`on_error` is taken once, after every item has settled, with the code `FOR_EACH_ITEM_FAILED`. Field reference:
+[`for-each` in the node reference](apl-node-reference.md#44b-for-each--for-each).
 
 ### 4.1 Compiled XML shape
 

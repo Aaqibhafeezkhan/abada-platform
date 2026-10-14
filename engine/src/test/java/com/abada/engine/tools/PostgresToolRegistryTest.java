@@ -151,6 +151,11 @@ class PostgresToolRegistryTest {
                 .containsExactly(
                         org.assertj.core.groups.Tuple.tuple("ABADA-APL-TOOL-002", "/flow/nodes/1/tools/1"),
                         org.assertj.core.groups.Tuple.tuple("ABADA-APL-TOOL-002", "/flow/nodes/1/tools/2"));
+        // A name without a server is refused by a deployment since 1.1.0 (it only ever was advisory).
+        assertThat(deploymentErrors(agent("bare", """
+                        - web_search
+                """))).extracting(BpmnValidationIssue::code, BpmnValidationIssue::path)
+                .containsExactly(org.assertj.core.groups.Tuple.tuple("ABADA-APL-TOOL-001", "/flow/nodes/1/tools/0"));
         assertThat(deploymentErrors(agent("loosened", """
                         - { ref: crm/create_ticket, policy: read }
                 """))).extracting(BpmnValidationIssue::path).containsExactly("/flow/nodes/1/tools/0/policy");
@@ -188,7 +193,6 @@ class PostgresToolRegistryTest {
         String source = agent("frozen", """
                         - crm/get_customer
                         - { ref: crm/create_ticket, policy: approval_required, approvers: [support] }
-                        - web_search
                 """);
         ProcessDefinitionEntity first = deploy(source);
         String before = engine.startProcess(PROJECT, "frozen", "alice", Map.of()).getId();
@@ -225,8 +229,6 @@ class PostgresToolRegistryTest {
         assertThat(old.get(0).approvers()).isEmpty();
         assertThat(old.get(0).credential()).isEqualTo("crm-token");
         assertThat(old.get(0).resourceRevision()).isLessThan(current.get(0).resourceRevision());
-        // The advisory name is passed on, but never bound.
-        assertThat(locked.get(before).agentWork().tools()).contains("web_search");
     }
 
     @Test

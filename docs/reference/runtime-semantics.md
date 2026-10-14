@@ -429,6 +429,17 @@ Evidence: [`AplBoundaryRuntimeTest`](../../engine/src/test/java/com/abada/engine
   [`PostgresEvidenceAndCostTest`](../../engine/src/test/java/com/abada/engine/core/agent/PostgresEvidenceAndCostTest.java),
   [`EvidenceAccessApiTest`](../../engine/src/test/java/com/abada/engine/api/EvidenceAccessApiTest.java).
 
+### Start inputs kept for replay
+
+A root instance's start variables are kept in `process_start_inputs` (V36,
+E15) under the same evidence policy as agent payloads, so a proposed change can
+be replayed on real cases. `none` keeps no payload; `redacted` masks sensitive
+variables and secret-like fields and flags the row `redacted`; `full` keeps the
+values as sent. The payload is AES-GCM encrypted and cleared by the retention
+sweep after `evidence_retention_days`, keeping the row. Child instances record
+nothing: replaying the parent starts its children again. Instances started
+before this release have no inputs and cannot be replayed.
+
 ## Call-process (child instances)
 
 - A token reaching a `call-process` node parks `WAITING`. In the same command
@@ -460,6 +471,16 @@ Evidence: [`AplBoundaryRuntimeTest`](../../engine/src/test/java/com/abada/engine
   (engine restarts after the child starts, between its end and the resume,
   with the job leased by a crashed replica; two replicas at once).
 
+### For-each
+
+A `for-each` node (E21) parks its token like a call and keeps one row per item in `for_each_items`
+(V38) for that visit. The rows are created in the parent's command; at most `max_parallel` items run, and the
+parent's lock serialises every change: each child's end schedules the same durable `CHILD_DONE` job a call
+uses, and that job (with the parent locked) records the item, starts the next pending one, and finishes the
+visit when none is left. A child already recorded is ignored, so a repeated job changes nothing, and a restart
+at any point leaves each item with exactly one child. Lock order is parent, then child. The visit's rows are
+deleted when the token leaves the node and rebuilt when an incident is retried.
+
 ## History and lifecycle delivery
 
 Activity history and its matching outbox event are written in the workflow
@@ -482,3 +503,23 @@ version. Existing instances remain pinned to their deployment ID; new starts
 resolve the latest committed version. Only parsed immutable definitions are
 cached. Cache insertion occurs after deployment commit, and cache loss changes
 performance rather than execution semantics.
+
+### Rollback
+
+A rollback (`POST /api/v1/projects/{projectId}/processes/{key}/versions/{version}/rollback`,
+E16) deploys the stored source of an earlier version as the next version, with
+`rollback_of` pointing at it. It is a deployment: the source is parsed again,
+tool references and called processes are re-resolved against the project now
+(a tool or child that no longer resolves refuses the rollback with the same
+typed errors as a deployment, and nothing is written), and the new version is
+immutable. History is never edited or deleted. Instances that started on the
+replaced version finish there; new starts use the new version. Rollbacks of one
+project run one after the other under a row lock on the project; a stale
+`expectedLatest` returns `409`, and so does a version that is already current
+or whose source and dependencies equal the current version. A required comment
+is stored with the version and recorded in the audit history
+(`DEFINITION_ROLLED_BACK`: actor, versions, running instances left on the
+replaced version; never the comment text). Open Insight proposals targeting the
+replaced version are superseded when they are next reviewed, as for any
+redeployment.
+

@@ -1,0 +1,27 @@
+version: abada.io/v1
+metadata:
+  key: kyc_batch
+  name: KYC batch
+  variables:
+    - { name: case_id, type: string }
+flow:
+  entry: start
+  nodes:
+    - { id: start, type: webhook, next: check_each }
+    # One governed child per document, three at a time; only `verdict` comes back, per item.
+    - id: check_each
+      type: for-each
+      description: Check every document
+      items: "${documents}"
+      process: document_check
+      item_input: document
+      inputs: { case_id: "${case_id}" }
+      outputs: { verdict: verdict }
+      max_items: 20
+      max_parallel: 3
+      results: check_results
+      on_error: manual
+      next: decide
+    - { id: decide, type: human-input, assignees: [ops], next: done }
+    - { id: manual, type: human-input, assignees: [ops], next: done }
+    - { id: done, type: end }

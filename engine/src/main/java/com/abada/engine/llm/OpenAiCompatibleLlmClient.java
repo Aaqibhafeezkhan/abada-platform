@@ -46,6 +46,14 @@ public class OpenAiCompatibleLlmClient {
     /** One chat completion against an explicit provider (also used by connection tests). */
     public String completeWith(ResolvedAiProvider provider, String model, String systemPrompt, String userPrompt,
                                Duration timeout) throws Exception {
+        return completeWithUsage(provider, model, systemPrompt, userPrompt, timeout).content();
+    }
+
+    /** A completion and the tokens the provider reported for it (null when it reported none). */
+    public record Completion(String content, Integer promptTokens, Integer completionTokens) {}
+
+    public Completion completeWithUsage(ResolvedAiProvider provider, String model, String systemPrompt,
+                                        String userPrompt, Duration timeout) throws Exception {
         if (provider.apiKey() == null || provider.apiKey().isBlank()) {
             throw new IllegalStateException("LLM provider is not configured");
         }
@@ -88,7 +96,10 @@ public class OpenAiCompatibleLlmClient {
         if (!content.isTextual() || content.asText().isBlank()) {
             throw new IllegalStateException("LLM response contained no usable text");
         }
-        return extractDocument(content.asText());
+        JsonNode usage = objectMapper.readTree(response.body()).path("usage");
+        return new Completion(extractDocument(content.asText()),
+                usage.path("prompt_tokens").isNumber() ? usage.path("prompt_tokens").asInt() : null,
+                usage.path("completion_tokens").isNumber() ? usage.path("completion_tokens").asInt() : null);
     }
 
     private String extractErrorDetail(String responseBody) {

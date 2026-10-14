@@ -17,8 +17,11 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/v1/projects/{projectId}/authoring")
 public class ProjectAuthoringController {
     public record GenerateAplRequest(String prompt, String mode, String baseAplSource) {}
+    /** {@code summary} and {@code patch} are set for a refinement: what changed, and the operations applied. */
+    @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
     public record GenerateAplResponse(String aplSource, String provider, String model,
-                                      int attempts, List<String> warnings) {}
+                                      int attempts, List<String> warnings, String summary,
+                                      List<java.util.Map<String, Object>> patch) {}
 
     private final AplAuthoringService authoring;
     private final ProjectAccessService access;
@@ -48,9 +51,13 @@ public class ProjectAuthoringController {
         try {
             var candidate = authoring.generate(projectId, mode, request.prompt(), request.baseAplSource());
             return ResponseEntity.ok(new GenerateAplResponse(candidate.aplSource(),
-                    candidate.provider().name(), candidate.model(), candidate.attempts(), candidate.warnings()));
+                    candidate.provider().name(), candidate.model(), candidate.attempts(), candidate.warnings(),
+                    candidate.summary(), candidate.patch().isEmpty() ? null : candidate.patch()));
         } catch (IllegalArgumentException exception) {
             throw invalid(exception.getMessage());
+        } catch (AplAuthoringService.AuthoringUnavailableException | AplAuthoringService.AuthoringFailedException
+                 exception) {
+            throw new ApiException(HttpStatus.CONFLICT, ApiErrorCode.ENGINE_COMMAND_REJECTED, exception.getMessage());
         }
     }
 

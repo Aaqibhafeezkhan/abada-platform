@@ -47,6 +47,9 @@ export function Nav({ anchorBase = "" }: { anchorBase?: string }) {
               {link.label}
             </a>
           ))}
+          <a href="/investors" className="text-[13.5px] text-t2 transition-colors hover:text-t1">
+            Investors
+          </a>
           <a
             href={DOCS_URL}
             className="text-[13.5px] text-t2 transition-colors hover:text-t1"
@@ -93,6 +96,9 @@ export function Nav({ anchorBase = "" }: { anchorBase?: string }) {
                 {link.label}
               </a>
             ))}
+            <a href="/investors" className="py-2 text-sm text-t2">
+              Investors
+            </a>
             <a href={DOCS_URL} className="py-2 text-sm text-t2">
               Docs
             </a>

@@ -1,7 +1,7 @@
 import React, { act } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { blur, buttons, byLabel, click, render, type } from '@/test/render';
-import { AgentLimitsEditor, CallProcessEditor, DelegatesEditor } from './AgentEditors';
+import { AgentLimitsEditor, CallProcessEditor, DelegatesEditor, ReviewedByEditor } from './AgentEditors';
 import { AgentToolsEditor } from './AgentToolsEditor';
 import { callProcessProblem, delegatesProblem, limitsProblem } from '@/lib/apl/agentFields';
 import type { CatalogTool } from '@/lib/apl/toolServers';
@@ -73,5 +73,24 @@ describe('agent limits, delegates and call-process editors', () => {
     expect(onChange).toHaveBeenLastCalledWith({ process: 'fraud_check', outputs: { verdict: 'fraud_verdict' } });
     expect(callProcessProblem({ process: 'fraud_check', inputs: { amount: 'amount * 2' }, outputs: { v: 'verdict' } }))
       .toBeNull();
+  });
+});
+
+describe('reviewed-by editor', () => {
+  const reviewers = [{ id: 'review', label: 'Review', outcomes: ['approve', 'reject'] }];
+
+  it('offers review steps with outcomes and defaults the accepting outcome to the first', () => {
+    const onChange = vi.fn();
+    const container = render(<ReviewedByEditor reviewers={reviewers} value={undefined} onChange={onChange} />);
+    const step = byLabel<HTMLSelectElement>(container, 'Review step');
+    step.value = 'review';
+    act(() => { step.dispatchEvent(new Event('change', { bubbles: true })); });
+    expect(onChange).toHaveBeenLastCalledWith({ node: 'review', accept: 'approve' });
+  });
+
+  it('flags a review step that no longer exists', () => {
+    const container = render(<ReviewedByEditor reviewers={reviewers} value={{ node: 'gone', accept: 'approve' }}
+      onChange={() => {}} />);
+    expect(container.textContent).toContain('"gone" is not a review step with outcomes');
   });
 });

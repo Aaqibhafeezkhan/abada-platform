@@ -44,6 +44,23 @@ public interface ProcessInstanceRepository extends JpaRepository<ProcessInstance
     /** Direct children of an instance (V29 lineage), oldest first. */
     List<ProcessInstanceEntity> findByParentInstanceIdOrderByStartDateAsc(String parentInstanceId);
 
+    /** Instances still running on a definition version (running or suspended). */
+    long countByProcessDefinitionDeploymentIdAndStatusIn(String deploymentId, Collection<ProcessStatus> statuses);
+
+    /** Finished root instances of a deployment whose start inputs were kept, newest first (E15 replay). */
+    @Query("select i from ProcessInstanceEntity i where i.processDefinitionDeploymentId = :deploymentId "
+            + "and i.status = com.abada.engine.core.model.ProcessStatus.COMPLETED and i.parentInstanceId is null "
+            + "and exists (select 1 from ProcessStartInputEntity s where s.instanceId = i.id "
+            + "and s.inputsEnc is not null) order by i.endDate desc")
+    List<ProcessInstanceEntity> findReplayable(@Param("deploymentId") String deploymentId, Pageable pageable);
+
+    /** Finished root instances of a deployment that cannot be replayed because no start inputs are kept. */
+    @Query("select count(i) from ProcessInstanceEntity i where i.processDefinitionDeploymentId = :deploymentId "
+            + "and i.status = com.abada.engine.core.model.ProcessStatus.COMPLETED and i.parentInstanceId is null "
+            + "and not exists (select 1 from ProcessStartInputEntity s where s.instanceId = i.id "
+            + "and s.inputsEnc is not null)")
+    long countNotReplayable(@Param("deploymentId") String deploymentId);
+
     interface ActiveProcessCount {
         String getProcessDefinitionId();
         long getInstanceCount();

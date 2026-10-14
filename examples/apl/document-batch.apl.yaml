@@ -1,0 +1,49 @@
+version: abada.io/v1
+
+# Checks every document of a case with a governed child process each, five at a time.
+# A document that cannot be checked does not stop the others: the case goes to a
+# person once they have all been tried, with every result in `check_results`.
+metadata:
+  key: document_batch
+  name: Document batch
+  owner: compliance
+  variables:
+    - { name: case_id, type: string, required: true }
+    - { name: documents, type: list, required: true }
+
+flow:
+  entry: case-opened
+  nodes:
+    - id: case-opened
+      type: webhook
+      description: A case with its documents arrived
+      next: check_each
+
+    - id: check_each
+      type: for-each
+      description: Check every document
+      items: "${documents}"          # a list; never more than max_items
+      process: document_check
+      item_input: document
+      inputs: { case_id: "${case_id}" }
+      outputs: { verdict: verdict }
+      max_items: 25
+      max_parallel: 5
+      results: check_results         # one { index, ok, outputs | error } per document, in order
+      on_error: manual_review
+      next: decide
+
+    - id: decide
+      type: human-input
+      description: Decide the case from the document verdicts
+      assignees: [compliance]
+      next: done
+
+    - id: manual_review
+      type: human-input
+      description: Some documents could not be checked; a person takes over
+      assignees: [compliance]
+      next: done
+
+    - id: done
+      type: end

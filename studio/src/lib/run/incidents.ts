@@ -63,3 +63,7 @@ export const loadAgentStepModel = async (projectId: string, incident: IncidentDT
   if (definition?.schemaType !== 'APL_NATIVE' || !definition.bpmnXml) return null;
   return agentStepModel(aplToWorkflow(parseAPLYaml(definition.bpmnXml)), incident.activityId, history);
 };
+
+/** Rolling a process back is a deployment: project operators, maintainers and owners (the engine enforces it too). */
+export const canRollBackProcess = (roles: readonly ProjectRole[] | undefined): boolean =>
+  !!roles?.some((role) => role === 'OPERATOR' || role === 'MAINTAINER' || role === 'OWNER');

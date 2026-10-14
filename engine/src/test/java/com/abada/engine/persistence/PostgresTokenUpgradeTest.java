@@ -103,7 +103,17 @@ class PostgresTokenUpgradeTest {
         // Back to the rc.8 schema (V22) with the state rc.8 itself would have written.
         try (var connection = DriverManager.getConnection(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(),
                 POSTGRES.getPassword()); var statement = connection.createStatement()) {
-            // Undo V33, V32, V31, V30, V29, V28, V27, V26, V25, V24, then V23.
+            // Undo V38, V37, V36, V35, V34, V33, V32, V31, V30, V29, V28, V27, V26, V25, V24, then V23.
+            statement.execute("drop table for_each_items");
+            statement.execute("alter table insight_approval_policies drop column replay_required");
+            statement.execute("alter table insight_approval_policies drop column replay_min_cases");
+            statement.execute("drop table replay_cases");
+            statement.execute("drop table replay_runs");
+            statement.execute("drop table process_start_inputs");
+            for (String column : List.of("rollback_of", "deployed_by", "deploy_comment")) {
+                statement.execute("alter table process_definitions drop column " + column);
+            }
+            statement.execute("drop table insight_agent_facts");
             statement.execute("drop index idx_outbox_project_seq");
             statement.execute("drop index idx_outbox_seq");
             statement.execute("alter table outbox_events drop column project_id");
@@ -151,7 +161,7 @@ class PostgresTokenUpgradeTest {
             for (String table : List.of("tasks", "external_tasks", "jobs", "event_subscriptions")) {
                 statement.execute("alter table " + table + " drop column token_id");
             }
-            statement.execute("delete from flyway_schema_history where version in ('23', '24', '25', '26', '27', '28', '29', '30', '31', '32', '33')");
+            statement.execute("delete from flyway_schema_history where version in ('23', '24', '25', '26', '27', '28', '29', '30', '31', '32', '33', '34', '35', '36', '37', '38')");
             legacyState(statement, joinId, "b", "[\"b\"]", "{\"join\":2}", "{\"join\":[\"a\"]}");
             legacyState(statement, raceId, "race_e0", "[\"race_e0\",\"race_e1\"]", "{}", "{}");
             legacyState(statement, reviewId, "review", "[\"review\"]", "{}", "{}");

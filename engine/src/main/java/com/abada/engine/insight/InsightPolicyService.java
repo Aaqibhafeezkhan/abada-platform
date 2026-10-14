@@ -38,6 +38,18 @@ public class InsightPolicyService {
     @Transactional
     public InsightApprovalPolicyEntity update(String projectId, String definitionKey, long expectedVersion,
             int requiredApprovals, String requiredGroups, String approvalMode, String actor) {
+        return update(projectId, definitionKey, expectedVersion, requiredApprovals, requiredGroups, approvalMode,
+                actor, null, null);
+    }
+
+    /** As above, and sets whether a replay must precede approval (null keeps the current setting). */
+    @Transactional
+    public InsightApprovalPolicyEntity update(String projectId, String definitionKey, long expectedVersion,
+            int requiredApprovals, String requiredGroups, String approvalMode, String actor,
+            Boolean replayRequired, Integer replayMinCases) {
+        if (replayMinCases != null && (replayMinCases < 1 || replayMinCases > 100)) {
+            throw new ProcessEngineException("replayMinCases must be between 1 and 100");
+        }
         if (requiredApprovals < 1 || requiredApprovals > 20) {
             throw new ProcessEngineException("requiredApprovals must be between 1 and 20");
         }
@@ -74,6 +86,8 @@ public class InsightPolicyService {
         entity.setRequiredApprovals(requiredApprovals);
         entity.setRequiredGroups(groups);
         entity.setApprovalMode(mode);
+        if (replayRequired != null) entity.setReplayRequired(replayRequired);
+        if (replayMinCases != null) entity.setReplayMinCases(replayMinCases);
         entity.setUpdatedAt(Instant.now());
         entity.setUpdatedBy(actor);
         return policies.save(entity);

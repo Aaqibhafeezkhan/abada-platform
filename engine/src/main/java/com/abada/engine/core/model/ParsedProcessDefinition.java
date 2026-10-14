@@ -27,11 +27,15 @@ public class ParsedProcessDefinition implements Serializable {
     private final Map<String, List<String>> flowGraph = new HashMap<>();
     private Map<String, LoopMeta> loops = Map.of();
     private Map<String, CallProcessMeta> callProcesses = Map.of();
+    /** For-each nodes (E21); each is also in {@link #callProcesses}. */
+    private Map<String, ForEachMeta> forEach = Map.of();
     private Set<String> sensitiveVariables = Set.of();
     /** Agent node id to its {@code evidence} override: payloads mode (wire name) and retention days. */
     private Map<String, EvidenceOverride> evidenceOverrides = Map.of();
     private Map<String, List<AgentRouteMeta>> agentRoutes = Map.of();
     private Map<String, List<DelegationMeta>> delegations = Map.of();
+    /** Agent node id to the human step that reviews its output (E14). */
+    private Map<String, ReviewedByMeta> reviews = Map.of();
 
     /** A node's {@code evidence: { payloads, retention_days }}; null fields leave the project's setting. */
     public record EvidenceOverride(String payloads, Integer retentionDays) implements java.io.Serializable {}
@@ -171,6 +175,16 @@ public class ParsedProcessDefinition implements Serializable {
         return this;
     }
 
+    public ParsedProcessDefinition withForEach(Map<String, ForEachMeta> declared) {
+        this.forEach = Map.copyOf(declared);
+        return this;
+    }
+
+    /** The for-each declared at an activity, or null for any other node. */
+    public ForEachMeta getForEach(String activityId) {
+        return forEach.get(activityId);
+    }
+
     public CallProcessMeta getCallProcess(String activityId) {
         return callProcesses.get(activityId);
     }
@@ -224,6 +238,25 @@ public class ParsedProcessDefinition implements Serializable {
     public BoundaryMeta getBoundary(String activityId, String boundaryId) {
         return boundariesOf(activityId).stream().filter(boundary -> boundary.id().equals(boundaryId))
                 .findFirst().orElse(null);
+    }
+
+    public ParsedProcessDefinition withReviews(Map<String, ReviewedByMeta> declared) {
+        this.reviews = Map.copyOf(declared);
+        return this;
+    }
+
+    /** The review declared by an agent node, or null. */
+    public ReviewedByMeta getReviewOf(String agentNodeId) {
+        return reviews.get(agentNodeId);
+    }
+
+    /** The agent nodes whose output the given human node reviews. */
+    public List<ReviewedByMeta> reviewsAt(String reviewNodeId) {
+        return reviews.values().stream().filter(review -> review.reviewNode().equals(reviewNodeId)).toList();
+    }
+
+    public Map<String, ReviewedByMeta> getReviews() {
+        return reviews;
     }
 
     public Map<String, LoopMeta> getLoops() {

@@ -36,7 +36,8 @@ export type APLNode =
   | APLMessageCatchNode
   | APLTimerNode
   | APLSignalNode
-  | APLCallProcessNode;
+  | APLCallProcessNode
+  | APLForEachNode;
 /**
  * This interface was referenced by `APLDocument`'s JSON-Schema
  * via the `definition` "nodeId".
@@ -121,7 +122,8 @@ export type NodeType =
   | 'message-catch'
   | 'timer'
   | 'signal'
-  | 'call-process';
+  | 'call-process'
+  | 'for-each';
 
 /**
  * Abada Process Language (APL) abada.io/v1. Owned by the engine; Studio types are generated from it.
@@ -254,6 +256,13 @@ export interface APLAgentNode {
       })
   )[];
   routes?: Routes;
+  /**
+   * The human-input node that reviews this agent's output and the outcome that means the answer was kept. Any other outcome counts as an override in Insight. Metadata only: it does not change routing.
+   */
+  reviewed_by?: {
+    node: NodeId;
+    accept: string;
+  };
   delegates?: Delegates;
   confidence_threshold?: number;
   temperature?: number;
@@ -734,6 +743,65 @@ export interface APLCallProcessNode {
   outputs: {
     [k: string]: string;
   };
+  /**
+   * Stricter nesting limit for this call.
+   */
+  max_depth?: number;
+  on_error?: OnError;
+  on_timeout?: OnTimeout;
+  loop?: Loop;
+  ui?: UiPosition;
+}
+/**
+ * Runs a governed child process once per item of a list, a bounded number at a time, and gathers one result per item into a list. An item that fails does not stop the others; the node's on_error is taken once, after every item has finished.
+ *
+ * This interface was referenced by `APLDocument`'s JSON-Schema
+ * via the `definition` "forEachNode".
+ */
+export interface APLForEachNode {
+  id: NodeId;
+  type: 'for-each';
+  /**
+   * Human-readable node label.
+   */
+  description?: string;
+  next: NodeRef;
+  /**
+   * Expression that evaluates, on this instance's variables, to the list to go over.
+   */
+  items: string;
+  /**
+   * Key of the process to call, in this project.
+   */
+  process: string;
+  /**
+   * The child variable that receives the current item.
+   */
+  item_input: string;
+  /**
+   * Child variable to an expression evaluated on this instance's variables.
+   */
+  inputs?: {
+    [k: string]: string | number | boolean;
+  };
+  /**
+   * Field of each result entry to the child variable it is copied from when that item's child completes; nothing else returns.
+   */
+  outputs: {
+    [k: string]: string;
+  };
+  /**
+   * Most items the list may have; a longer list fails the node before any child starts. The engine's own limit may be lower.
+   */
+  max_items: number;
+  /**
+   * Children running at once. The engine's own limit may be lower.
+   */
+  max_parallel?: number;
+  /**
+   * Variable that receives the list of results, in item order: { index, ok, outputs } or { index, ok: false, error }.
+   */
+  results: string;
   /**
    * Stricter nesting limit for this call.
    */

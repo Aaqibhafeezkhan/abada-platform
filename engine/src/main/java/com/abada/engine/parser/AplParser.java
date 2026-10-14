@@ -13,7 +13,9 @@ import com.abada.engine.core.model.AgentRouteMeta;
 import com.abada.engine.core.model.BoundaryMeta;
 import com.abada.engine.core.model.DelegationMeta;
 import com.abada.engine.core.model.DecisionTableMeta;
+import com.abada.engine.core.model.ForEachMeta;
 import com.abada.engine.core.model.LoopMeta;
+import com.abada.engine.core.model.ReviewedByMeta;
 import com.abada.engine.core.model.AgentWorkDescriptor;
 import com.abada.engine.core.model.GatewayMeta;
 import com.abada.engine.core.model.EventMeta;
@@ -108,7 +110,7 @@ public final class AplParser {
     public static final Set<String> SUPPORTED_TYPES = Set.of(
              "webhook", "end", "agent", "engine-task", "decision-table", "script",
              "approval-gate", "condition", "inclusive", "parallel", "event-gateway",
-             "message-catch", "timer", "signal", "human-input", "call-process");
+             "message-catch", "timer", "signal", "human-input", "call-process", "for-each");
 
     private static final String APL_VALIDATION_CODE = "ABADA-APL-VALIDATION-001";
 
@@ -308,6 +310,7 @@ public final class AplParser {
         Map<String, Object> endEvents = new LinkedHashMap<>();
         Map<String, LoopMeta> loops = new LinkedHashMap<>();
         Map<String, CallProcessMeta> callProcesses = new LinkedHashMap<>();
+        Map<String, ForEachMeta> forEachNodes = new LinkedHashMap<>();
         Map<String, ParsedProcessDefinition.EvidenceOverride> evidenceOverrides = new LinkedHashMap<>();
         Map<String, List<DelegationMeta>> delegations = new LinkedHashMap<>();
 
@@ -619,6 +622,23 @@ public final class AplParser {
                         }
                         callProcesses.put(nodeId, parseCallProcess(node, nodeId, nodeName, processId));
                     }
+                    case "for-each" -> {
+                        if (!node.hasNonNull("next")) {
+                            throw validation("next", "for-each node '" + nodeId + "' requires 'next'");
+                        }
+                        ForEachMeta forEach = parseForEach(node, nodeId);
+                        forEachNodes.put(nodeId, forEach);
+                        // Pinned, depth-checked and cancelled like a call; the item input is set by the engine.
+                        CallProcessMeta call = parseCallProcess(node, nodeId, nodeName, processId);
+                        Map<String, String> inputs = new LinkedHashMap<>(call.inputs());
+                        if (inputs.containsKey(forEach.itemInput())) {
+                            throw validation("inputs/" + forEach.itemInput(), "for-each node '" + nodeId + "' sets '"
+                                    + forEach.itemInput() + "' itself from each item; remove it from inputs");
+                        }
+                        inputs.put(forEach.itemInput(), ForEachMeta.ITEM_PLACEHOLDER);
+                        callProcesses.put(nodeId, new CallProcessMeta(nodeId, nodeName, call.processKey(), inputs,
+                                call.outputs(), call.maxDepth()));
+                    }
                     case "human-input" -> {
                         // Canonical APL field is `formKey`; `formId` remains a
                         // deprecated alias so existing documents keep deploying.
@@ -672,15 +692,19 @@ public final class AplParser {
         if (errors.isEmpty()) {
             addBoundaries(nodesById, pointerById, flows, flowIds, boundaries, agentRoutes, errors);
         }
+        Map<String, ReviewedByMeta> reviews = new LinkedHashMap<>();
+        if (errors.isEmpty()) {
+            parseReviews(nodesById, pointerById, flows, userTasks, reviews, errors);
+        }
         if (!errors.isEmpty()) throw new BpmnValidationException(errors);
 
         String definitionId = processId;
         ParsedProcessDefinition definition = new ParsedProcessDefinition(definitionId, name, null, entry,
                 userTasks, serviceTasks, scriptTasks, decisionTables,
                 flows, gateways, events, endEvents,
-                rawSource, null, null).withLoops(loops).withBoundaries(boundaries).withCallProcesses(callProcesses)
+                rawSource, null, null).withLoops(loops).withBoundaries(boundaries).withCallProcesses(callProcesses).withForEach(forEachNodes)
                 .withEvidenceOverrides(evidenceOverrides).withAgentRoutes(agentRoutes)
-                .withDelegations(delegations)
+                .withDelegations(delegations).withReviews(reviews)
                 .withSensitiveVariables(AplVariables.sensitiveNames(root));
         if (enforceDeploymentPolicy) {
             // Every cycle must be bounded. Checked on deployment only, like the
@@ -826,6 +850,49 @@ public final class AplParser {
             maxDepth = depth.asInt();
         }
         return new CallProcessMeta(nodeId, nodeName, process, inputs, outputs, maxDepth);
+    }
+
+    /** Most items any for-each may declare; the engine's own limit ({@code abada.for-each.max-items}) may be lower. */
+    public static final int MAX_FOR_EACH_ITEMS = 1000;
+    public static final int MAX_FOR_EACH_PARALLEL = 50;
+
+    /** {@code for-each}: the list expression, the item input, and the bounds that are required, never defaulted. */
+    private static ForEachMeta parseForEach(JsonNode node, String nodeId) {
+        String items = node.path("items").isTextual() ? node.path("items").asText().strip() : "";
+        if (items.isEmpty()) {
+            throw validation("items", "for-each node '" + nodeId + "' requires 'items': an expression for the list");
+        }
+        try {
+            com.abada.engine.expression.WorkflowExpressions.compile(items);
+        } catch (com.abada.engine.expression.ExpressionCompileException exception) {
+            throw validation("items", "for-each node '" + nodeId + "' items is not a valid expression: "
+                    + exception.getMessage());
+        }
+        String itemInput = node.path("item_input").asText("");
+        if (!VARIABLE.matcher(itemInput).matches()) {
+            throw validation("item_input", "for-each node '" + nodeId
+                    + "' requires 'item_input': the child variable that receives each item");
+        }
+        JsonNode maxItems = node.path("max_items");
+        if (!maxItems.isIntegralNumber() || maxItems.asInt() < 1 || maxItems.asInt() > MAX_FOR_EACH_ITEMS) {
+            throw validation("max_items", "for-each node '" + nodeId + "' requires 'max_items', an integer between 1 and "
+                    + MAX_FOR_EACH_ITEMS + ": the list is never unbounded");
+        }
+        int parallel = 1;
+        if (node.has("max_parallel")) {
+            JsonNode value = node.path("max_parallel");
+            if (!value.isIntegralNumber() || value.asInt() < 1 || value.asInt() > MAX_FOR_EACH_PARALLEL) {
+                throw validation("max_parallel", "for-each node '" + nodeId
+                        + "' max_parallel must be an integer between 1 and " + MAX_FOR_EACH_PARALLEL);
+            }
+            parallel = value.asInt();
+        }
+        String results = node.path("results").asText("");
+        if (!VARIABLE.matcher(results).matches()) {
+            throw validation("results", "for-each node '" + nodeId
+                    + "' requires 'results': the variable that receives the list of results");
+        }
+        return new ForEachMeta(nodeId, items, itemInput, maxItems.asInt(), parallel, results);
     }
 
     /**
@@ -1048,10 +1115,15 @@ public final class AplParser {
                             + "' must be <server>/<tool>");
                 }
                 if (!ref.contains("/")) {
+                    String message = "agent node '" + nodeId + "' names tool '" + ref + "' without a server: use"
+                            + " <server>/<tool> from a project tool server";
+                    if (enforceDeploymentPolicy) {
+                        // Since 1.1.0 a deployment refuses it. Definitions already deployed reload unchanged.
+                        throw BpmnValidationException.single(new BpmnValidationIssue(TOOL_ADVISORY_CODE,
+                                ValidationSeverity.ERROR, message, null, nodeId, LANGUAGE_VERSION, null, null, field));
+                    }
                     warnings.add(new BpmnValidationIssue(TOOL_ADVISORY_CODE, ValidationSeverity.WARNING,
-                            "agent node '" + nodeId + "' names tool '" + ref + "' without a server: it is"
-                                    + " advisory only and never executed; use <server>/<tool> from a project"
-                                    + " tool server (an error from 1.1.0)",
+                            message + " (advisory only and never executed; refused by new deployments)",
                             null, nodeId, LANGUAGE_VERSION, null, null, nodePointer + "/" + field));
                 }
                 tools.add(ref);
@@ -1135,7 +1207,7 @@ public final class AplParser {
         return new com.abada.engine.core.model.AgentLimits(turns, tokens, budget);
     }
 
-    /** {@code tools:} names without a server (rc.x): advisory, never executed. */
+    /** {@code tools:} names without a server (rc.x): refused by a deployment since 1.1.0, advisory when reloaded. */
     public static final String TOOL_ADVISORY_CODE = "ABADA-APL-TOOL-001";
 
     private static final java.util.regex.Pattern TOOL_REF =
@@ -1334,8 +1406,72 @@ public final class AplParser {
         }
     }
 
+    /** Error code of a malformed {@code reviewed_by} (E14). */
+    public static final String REVIEW_CODE = "ABADA-APL-REVIEW-001";
+
+    /**
+     * {@code reviewed_by: { node, accept }} on an agent: the node must be a
+     * human step with outcomes, reachable from the agent, and {@code accept}
+     * one of its outcomes. Metadata only; routing is untouched.
+     */
+    private static void parseReviews(Map<String, JsonNode> nodesById, Map<String, String> pointerById,
+            List<SequenceFlow> flows, Map<String, TaskMeta> userTasks, Map<String, ReviewedByMeta> reviews,
+            List<BpmnValidationIssue> errors) {
+        for (Map.Entry<String, JsonNode> entry : nodesById.entrySet()) {
+            String agentId = entry.getKey();
+            JsonNode node = entry.getValue();
+            if (!node.has("reviewed_by")) continue;
+            String base = pointerById.get(agentId) + "/reviewed_by";
+            if (!"agent".equals(node.path("type").asText())) {
+                errors.add(reviewIssue(base, agentId, "node '" + agentId
+                        + "' declares 'reviewed_by', which only agent nodes support"));
+                continue;
+            }
+            JsonNode declared = node.path("reviewed_by");
+            String reviewId = declared.path("node").asText("");
+            String accept = declared.path("accept").asText("");
+            TaskMeta review = userTasks.get(reviewId);
+            if (review == null) {
+                errors.add(reviewIssue(base + "/node", agentId, "agent '" + agentId + "' is reviewed_by '"
+                        + reviewId + "', which is not a human-input node"));
+            } else if (review.getOutcomes().isEmpty()) {
+                errors.add(reviewIssue(base + "/node", agentId, "review node '" + reviewId
+                        + "' declares no outcomes, so an override cannot be told from an acceptance"));
+            } else if (review.getOutcome(accept) == null) {
+                errors.add(reviewIssue(base + "/accept", agentId, "'" + accept + "' is not an outcome of review node '"
+                        + reviewId + "'; expected one of "
+                        + review.getOutcomes().stream().map(com.abada.engine.core.model.OutcomeMeta::name).toList()));
+            } else if (!reaches(flows, agentId, reviewId)) {
+                errors.add(reviewIssue(base + "/node", agentId, "review node '" + reviewId
+                        + "' is not reachable from agent '" + agentId + "'"));
+            } else {
+                reviews.put(agentId, new ReviewedByMeta(agentId, reviewId, accept));
+            }
+        }
+    }
+
+    private static BpmnValidationIssue reviewIssue(String path, String elementId, String message) {
+        return new BpmnValidationIssue(REVIEW_CODE, ValidationSeverity.ERROR, message,
+                null, elementId, LANGUAGE_VERSION, null, null, path);
+    }
+
+    private static boolean reaches(List<SequenceFlow> flows, String from, String to) {
+        Set<String> seen = new java.util.HashSet<>();
+        java.util.ArrayDeque<String> queue = new java.util.ArrayDeque<>(List.of(from));
+        while (!queue.isEmpty()) {
+            String current = queue.poll();
+            if (!seen.add(current)) continue;
+            for (SequenceFlow flow : flows) {
+                if (!flow.getSourceRef().equals(current)) continue;
+                if (flow.getTargetRef().equals(to)) return true;
+                queue.add(flow.getTargetRef());
+            }
+        }
+        return false;
+    }
+
     private static final Set<String> BOUNDARY_TYPES = Set.of("agent", "engine-task", "human-input", "approval-gate",
-            "call-process");
+            "call-process", "for-each");
 
     private static void addBoundary(String nodeId, JsonNode node, Map<String, JsonNode> nodesById,
             List<SequenceFlow> flows, Set<String> flowIds, List<BoundaryMeta> boundaries,

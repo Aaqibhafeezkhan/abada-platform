@@ -38,7 +38,7 @@ class PostgresSchemaUpgradeTest {
                 .load();
         assertThat(latest.migrate().success).isTrue();
         assertThat(latest.validateWithResult().validationSuccessful).isTrue();
-        assertThat(latest.info().current().getVersion().getVersion()).isEqualTo("33");
+        assertThat(latest.info().current().getVersion().getVersion()).isEqualTo("38");
 
         try (var connection = DriverManager.getConnection(
                 POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
@@ -251,6 +251,50 @@ class PostgresSchemaUpgradeTest {
             }
             try (var indexes = metadata.getIndexInfo(null, schema, "jobs", false, false)) {
                 assertThat(indexNames(indexes)).contains("idx_jobs_instance_token_kind");
+            }
+            // V38: the items of a for-each node.
+            for (String column : new String[] {"parent_instance_id", "parent_token_id", "item_index", "state",
+                    "item_json", "child_instance_id", "outputs_json", "error_code"}) {
+                try (var columns = metadata.getColumns(null, schema, "for_each_items", column)) {
+                    assertThat(columns.next()).as("for_each_items." + column).isTrue();
+                }
+            }
+            try (var indexes = metadata.getIndexInfo(null, schema, "for_each_items", true, false)) {
+                assertThat(indexNames(indexes)).contains("uk_for_each_item");
+            }
+            // V37: replay runs and cases, and the policy columns that can require one.
+            for (String[] column : new String[][] {{"replay_runs", "proposal_checksum"}, {"replay_runs", "status"},
+                    {"replay_cases", "run_id"}, {"replay_cases", "diff_json"}, {"replay_cases", "lease_until"},
+                    {"insight_approval_policies", "replay_required"}, {"insight_approval_policies", "replay_min_cases"}}) {
+                try (var columns = metadata.getColumns(null, schema, column[0], column[1])) {
+                    assertThat(columns.next()).as(column[0] + "." + column[1]).isTrue();
+                }
+            }
+            try (var indexes = metadata.getIndexInfo(null, schema, "replay_cases", false, false)) {
+                assertThat(indexNames(indexes)).contains("idx_replay_cases_claim", "idx_replay_cases_run");
+            }
+            // V36: the variables a root instance started with, kept for replay.
+            for (String column : new String[] {"instance_id", "deployment_id", "payload_mode", "inputs_enc",
+                    "redacted", "purge_after", "purged_at"}) {
+                try (var columns = metadata.getColumns(null, schema, "process_start_inputs", column)) {
+                    assertThat(columns.next()).as("process_start_inputs." + column).isTrue();
+                }
+            }
+            // V35: who deployed a version and the version a rollback restores.
+            for (String column : new String[] {"rollback_of", "deployed_by", "deploy_comment"}) {
+                try (var columns = metadata.getColumns(null, schema, "process_definitions", column)) {
+                    assertThat(columns.next()).as("process_definitions." + column).isTrue();
+                }
+            }
+            // V34: agent visit facts for the Insight signals.
+            for (String column : new String[] {"visit_id", "agent_node", "confidence", "cost_usd", "cost_unpriced",
+                    "review_node", "review_outcome", "overridden", "reviewed_at"}) {
+                try (var columns = metadata.getColumns(null, schema, "insight_agent_facts", column)) {
+                    assertThat(columns.next()).as("insight_agent_facts." + column).isTrue();
+                }
+            }
+            try (var indexes = metadata.getIndexInfo(null, schema, "insight_agent_facts", true, false)) {
+                assertThat(indexNames(indexes)).contains("uq_insight_agent_facts_visit");
             }
             // V33: the outbox stream's order and project.
             for (String column : new String[] {"seq", "project_id"}) {
