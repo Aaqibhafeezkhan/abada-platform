@@ -264,6 +264,25 @@ class AgentLoopTest {
     }
 
     @Test
+    void unavailableModelCallsFromEarlierLeasesSpendNoTurn() throws Exception {
+        // Three fallback models were unavailable before a deferral; the same attempt resumes with max_turns 2.
+        List<AgentStep> journaled = List.of(
+                step(1, "MODEL_CALL", "FAILED", null, null, Map.of("turn", 1, "model", "model-a"),
+                        Map.of("error", "AgentUnavailableException")),
+                step(2, "MODEL_CALL", "FAILED", null, null, Map.of("turn", 1, "model", "model-a"),
+                        Map.of("error", "AgentUnavailableException")),
+                step(3, "MODEL_CALL", "FAILED", null, null, Map.of("turn", 1, "model", "model-a"),
+                        Map.of("error", "AgentUnavailableException")));
+        ScriptedGateway model = new ScriptedGateway()
+                .then(calls(call("c1", "crm__get_customer", "{}")))
+                .then(answer("{\"verdict\":\"ok\"}"));
+        AgentLoop.Outcome outcome = run(work(List.of(READ), new AgentLimits(2, null, null)), journaled, model,
+                new StubTools(), new FakeJournal());
+        assertEquals(Map.of("verdict", "ok"), outcome.result().value());
+        assertEquals(2, model.received.size());
+    }
+
+    @Test
     void aMissingToolOrAChangedSchemaStopsBeforeAnyModelCall() {
         ToolBinding gone = binding("archive", "read", null);
         ScriptedGateway model = new ScriptedGateway();
