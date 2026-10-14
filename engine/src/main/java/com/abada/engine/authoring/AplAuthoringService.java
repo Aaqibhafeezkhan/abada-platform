@@ -22,7 +22,7 @@ import org.springframework.stereotype.Service;
 @Service
 public class AplAuthoringService {
     public enum Mode { CREATE, REFINE }
-    public enum Provider { LLM, LOCAL_FALLBACK }
+    public enum Provider { LLM }
     /**
      * A candidate for human review. For a refinement, {@code patch} holds the operations that were applied to the
      * base source and {@code summary} the model's one-sentence account of them; both are empty for a new process.
@@ -34,7 +34,7 @@ public class AplAuthoringService {
         }
     }
 
-    /** A refinement was asked for and no AI model is configured: no pretend change is made. */
+    /** No AI model is configured: no pretend process or change is made. */
     public static class AuthoringUnavailableException extends RuntimeException {
         public AuthoringUnavailableException(String message) {
             super(message);
@@ -57,6 +57,62 @@ public class AplAuthoringService {
             target must reference an existing node. Use stable, descriptive node ids matching
             [a-zA-Z][a-zA-Z0-9_-]*. Never emit markdown fences or prose outside the YAML. Keep agents
             probabilistic and business rules deterministic.
+
+            Turn the request into a process, one node per step. Never copy the whole request into one agent prompt.
+            - Reading, extracting, classifying or summarising unstructured input (documents, images, OCR, free
+              text): an agent with a short prompt for that step only and a result_variable for what it produces.
+            - "If", "check whether", "when ... otherwise" over data the process holds: a condition whose CEL rules
+              end with an else rule, or a decision-table. An agent never makes these decisions.
+            - Approval, validation, review or sign-off by a person or role: a human-input with assignees naming
+              that role, and outcomes (approve, reject) when the next step depends on the answer.
+            - Performing an action in another system (grant access, pay, notify, update a record): an engine-task
+              with service abada:<action-name>.
+            - Every path reaches an end node; use separate end nodes when the outcomes differ. When the request does
+              not say what happens on a branch (for example after a rejection), stop without performing the action.
+            """;
+    /** A worked decomposition shown to the model; {@code %s} is the default agent model. Kept valid by a test. */
+    static final String CREATE_EXAMPLE = """
+            Example request: Read the amount from the invoice; if it is over 1000 a manager must approve it,
+            otherwise pay it.
+            Example answer:
+            version: abada.io/v1
+            metadata:
+              key: invoice_payment
+              name: Invoice payment
+            flow:
+              entry: start
+              nodes:
+                - id: start
+                  type: webhook
+                  next: read_invoice
+                - id: read_invoice
+                  type: agent
+                  model: %s
+                  prompt: Read the total amount from the invoice document.
+                  result_variable: invoice
+                  next: check_amount
+                - id: check_amount
+                  type: condition
+                  rules:
+                    - if: invoice.amount > 1000
+                      then: manager_approval
+                    - else: true
+                      then: pay_invoice
+                - id: manager_approval
+                  type: human-input
+                  description: Approve an invoice over 1000
+                  assignees: [managers]
+                  outcomes:
+                    approve: { next: pay_invoice }
+                    reject: { next: rejected }
+                - id: pay_invoice
+                  type: engine-task
+                  service: abada:pay-invoice
+                  next: paid
+                - id: paid
+                  type: end
+                - id: rejected
+                  type: end
             """;
     private static final String PATCH_ROLE = """
             You refine an existing Abada process. Answer with exactly one JSON object and nothing else:
@@ -94,37 +150,50 @@ public class AplAuthoringService {
         String name = processName(request);
         String key = uniqueKey(projectId, slug(request));
 
-        List<String> warnings = new ArrayList<>();
-        int attempts = 0;
-        if (llm.isConfigured()) {
-            String userPrompt = "Create a complete process for this request:\n" + request + "\n\n" + requirements(key, name);
-            for (int repair = 0; repair <= MAX_REPAIRS; repair++) {
-                attempts++;
-                try {
-                    String candidate = llm.complete(createSystem(), userPrompt);
-                    String validationError = validationError(candidate, key);
-                    if (validationError == null) {
-                        log.info("Generated validated APL candidate for project {} key {} with {} attempt(s)",
-                                projectId, key, attempts);
-                        return new Candidate(candidate, Provider.LLM, llm.model(), attempts, List.copyOf(warnings));
-                    }
-                    warnings.add("LLM candidate " + attempts + " failed APL validation");
-                    userPrompt = repairPrompt(request, key, validationError, candidate);
-                } catch (Exception exception) {
-                    warnings.add("LLM request " + attempts + " failed");
-                    log.warn("APL authoring request failed for project {} key {} on attempt {}: {}",
-                            projectId, key, attempts, exception.getMessage());
-                }
-            }
-        } else {
-            warnings.add("LLM provider is not configured");
+        if (!llm.isConfigured()) {
+            throw new AuthoringUnavailableException("No AI model is configured, so no process was generated from "
+                    + "your description. Add a provider in Settings > AI Providers, or start from a template.");
         }
-
-        String fallback = fallback(key, name, request);
-        String fallbackError = validationError(fallback, key);
-        if (fallbackError != null) throw new IllegalStateException("Local APL fallback is invalid: " + fallbackError);
-        warnings.add("A deterministic local starter was generated and requires review");
-        return new Candidate(fallback, Provider.LOCAL_FALLBACK, null, attempts, List.copyOf(warnings));
+        List<String> warnings = new ArrayList<>();
+        String userPrompt = "Create a complete process for this request:\n" + request + "\n\n" + requirements(key, name);
+        String lastProblem = null;
+        String incomplete = null;
+        List<String> incompleteGaps = List.of();
+        for (int attempt = 1; attempt <= MAX_REPAIRS + 1; attempt++) {
+            try {
+                String candidate = llm.complete(createSystem(), userPrompt);
+                String validationError = validationError(candidate, key);
+                if (validationError == null) {
+                    List<String> gaps = AplStructureCheck.gaps(request, candidate);
+                    if (gaps.isEmpty()) {
+                        log.info("Generated validated APL candidate for project {} key {} with {} attempt(s)",
+                                projectId, key, attempt);
+                        return new Candidate(candidate, Provider.LLM, llm.model(), attempt, List.copyOf(warnings));
+                    }
+                    // Valid, but a step the request asks for is missing: keep it in case no better one comes.
+                    incomplete = candidate;
+                    incompleteGaps = gaps;
+                    warnings.add("LLM candidate " + attempt + " left part of the request out of the process");
+                    userPrompt = repairPrompt(request, key, "- " + String.join("\n- ", gaps), candidate);
+                    continue;
+                }
+                lastProblem = validationError;
+                warnings.add("LLM candidate " + attempt + " failed APL validation");
+                userPrompt = repairPrompt(request, key, validationError, candidate);
+            } catch (Exception exception) {
+                warnings.add("LLM request " + attempt + " failed");
+                log.warn("APL authoring request failed for project {} key {} on attempt {}: {}",
+                        projectId, key, attempt, exception.getMessage());
+            }
+        }
+        if (incomplete != null) {
+            warnings.addAll(incompleteGaps);
+            return new Candidate(incomplete, Provider.LLM, llm.model(), MAX_REPAIRS + 1, List.copyOf(warnings));
+        }
+        throw new AuthoringFailedException("The model could not produce a valid process after "
+                + (MAX_REPAIRS + 1) + " attempts" + (lastProblem == null
+                        ? ": the AI provider did not answer. Check the provider in Settings > AI Providers."
+                        : ". The engine rejected the last candidate:\n" + lastProblem));
     }
 
     /**
@@ -180,7 +249,8 @@ public class AplAuthoringService {
     }
 
     private String createSystem() {
-        return CREATE_ROLE + "\n" + AplPromptBuilder.languageReference(allowedModels());
+        return CREATE_ROLE + "\n" + CREATE_EXAMPLE.formatted(defaultAgentModel) + "\n"
+                + AplPromptBuilder.languageReference(allowedModels());
     }
 
     private String patchSystem() {
@@ -243,36 +313,6 @@ public class AplAuthoringService {
         if (value.isEmpty()) throw new IllegalArgumentException("prompt is required");
         if (value.length() > 8_000) throw new IllegalArgumentException("prompt must not exceed 8000 characters");
         return value;
-    }
-
-    private String fallback(String key, String name, String prompt) {
-        return """
-                version: abada.io/v1
-                metadata:
-                  key: %s
-                  name: %s
-                  owner: studio-user
-                  category: custom
-                flow:
-                  entry: start
-                  nodes:
-                    - id: start
-                      type: webhook
-                      description: Receives the initial process payload.
-                      next: analyze
-                    - id: analyze
-                      type: agent
-                      profile: abada.agent/v1
-                      model: %s
-                      prompt: %s
-                      confidence_threshold: 85
-                      temperature: 0.2
-                      result_variable: analysis_result
-                      next: end
-                    - id: end
-                      type: end
-                      description: Records the terminal outcome.
-                """.formatted(key, quoted(name), defaultAgentModel, quoted(prompt));
     }
 
     private String quoted(String value) {

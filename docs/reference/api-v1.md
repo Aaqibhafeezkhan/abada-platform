@@ -136,16 +136,28 @@ optional `model` and `reason` next to `retries`, and resolve the job's open
 explicit active-project `OWNER` or `MAINTAINER` membership; global platform
 administration does not bypass this product-authoring boundary.
 
-The response contains a review-only `aplSource`, `provider` (`LLM` or
-`LOCAL_FALLBACK`), optional `model`, `attempts`, and non-sensitive `warnings`.
+The response contains a review-only `aplSource`, `provider` (`LLM`), optional
+`model`, `attempts`, and non-sensitive `warnings`. Earlier releases could also
+return `LOCAL_FALLBACK`, a fixed template that ignored the request; it is no
+longer produced.
 
 The model is told about APL from the language's own JSON Schema, so the node
 types and fields it knows are exactly the ones the engine accepts.
 
-- **`CREATE`** asks for a whole document. The Engine validates it with
-  `AplParser`, retries an invalid candidate at most twice, feeding back each
-  problem's path and message, and returns a deterministic valid starter if the
-  provider is absent or unavailable.
+- **`CREATE`** asks for a whole document. The prompt includes decomposition
+  rules and a worked example: extraction goes to an `agent`, branching to a
+  `condition` or `decision-table`, approval or validation by a role to a
+  `human-input`, and actions to an `engine-task`. The Engine validates the
+  candidate with `AplParser` and retries an invalid one at most twice, feeding
+  back each problem's path and message. It also compares the candidate's shape
+  with the request: a request that branches ("if … otherwise") but has no
+  routing node, or asks a person to approve or validate but has no human step,
+  is sent back once per remaining attempt. If every attempt stays incomplete,
+  the last valid candidate is returned with `warnings` naming what it misses.
+  With no model configured the endpoint returns `409`. It also returns `409`
+  when no valid candidate comes back, with the engine's last validation
+  problem or the fact that the provider did not answer. It never returns a
+  template in place of a generated process.
 - **`REFINE`** works as a **patch**: the model answers with a short list of
   operations (`addNode`, `removeNode`, `updateNode`, `setEntry`) and a one-
   sentence `summary`; the Engine applies them, validates the result and repairs
