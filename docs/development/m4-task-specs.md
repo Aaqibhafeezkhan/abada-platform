@@ -505,6 +505,9 @@ refinement changes only what was asked, shown as a reviewable patch.
   never persists workflow state and never deploys.
 - The local deterministic fallback stays and still says it is a starter. Refine
   with no configured model returns a typed error instead of a pretend change.
+  *Superseded after 1.1.0:* create no longer returns the fallback either. The
+  template ignored the request and was mistaken for generated output, so create
+  now refuses with a typed reason just as refine does.
 - Studio: show the patch as a node-level diff on the canvas (added / changed /
   removed) and as a YAML diff; accept loads it into the editor; reject discards.
   Undo/redo covers an accepted patch as one step.

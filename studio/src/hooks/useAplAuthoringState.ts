@@ -21,6 +21,8 @@ export function useAplAuthoringState(
 ) {
   const [authoringCandidate, setAuthoringCandidate] = useState<AuthoringCandidate | null>(null);
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
+  /** Why the last request produced no candidate, shown where the request was typed. */
+  const [authoringError, setAuthoringError] = useState<string | null>(null);
 
   const handleGenerateWorkflow = useCallback(async (promptText: string, mode: 'new' | 'refine' = 'new') => {
     if (!activeProject) {
@@ -30,6 +32,7 @@ export function useAplAuthoringState(
       return;
     }
     setIsGenerating(true);
+    setAuthoringError(null);
     playCue('loading', { emphasis: 'subtle' });
     const timestamp = () => new Date().toLocaleTimeString();
 
@@ -72,11 +75,12 @@ export function useAplAuthoringState(
           nodeTitle: 'Studio Compiler',
           nodeType: 'event',
           status: 'success',
-          message: `${candidate.provider === 'LLM' ? 'LLM' : 'Local fallback'} produced validated APL in ${candidate.attempts} attempt(s). Review before applying.`,
+          message: `${candidate.model || 'LLM'} produced validated APL in ${candidate.attempts} attempt(s)${candidate.warnings.length ? ' with warnings' : ''}. Review before applying.`,
         }
       ]);
     } catch (err: any) {
       playCue('error');
+      setAuthoringError(err.message);
       setSimulationLogs(prev => [
         ...prev,
         {
@@ -99,6 +103,8 @@ export function useAplAuthoringState(
     setAuthoringCandidate,
     isGenerating,
     setIsGenerating,
+    authoringError,
+    setAuthoringError,
     handleGenerateWorkflow
   };
 }

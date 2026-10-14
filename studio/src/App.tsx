@@ -98,7 +98,8 @@ export default function App() {
   } = useLiveInstanceOverlay(activeProject, workflows, setSidebarTab, setDesignerMode, setShowRunPanel, setCurrentView, setSimulationLogs);
 
   const {
-    authoringCandidate, setAuthoringCandidate, isGenerating, handleGenerateWorkflow
+    authoringCandidate, setAuthoringCandidate, isGenerating, handleGenerateWorkflow,
+    authoringError, setAuthoringError
   } = useAplAuthoringState(activeProject, currentWorkflow, setSimulationLogs, setDesignerMode);
 
   const displayedWorkflow = selectedLiveInstance && liveWorkflow ? liveWorkflow : currentWorkflow;
@@ -729,6 +730,8 @@ export default function App() {
                     onGenerateWorkflow={handleGenerateWorkflow}
                     isGenerating={isGenerating}
                     hasActiveWorkflow={!!activeProject}
+                    error={authoringError}
+                    onDismissError={() => setAuthoringError(null)}
                   />
                 </>
               )

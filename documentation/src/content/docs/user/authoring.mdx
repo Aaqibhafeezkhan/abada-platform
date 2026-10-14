@@ -151,8 +151,13 @@ flow:
   automatically; a stale save is refused instead of overwriting someone
   else's edit.
 - **Describe it.** The bar at the bottom of the canvas drafts or refines a
-  process from plain language through the configured AI provider, or a local
-  scaffold when none is reachable. You review the result before it applies.
+  process from plain language through the configured AI provider. Each step
+  becomes its own node: extraction goes to an agent, "if … otherwise" to a
+  condition, approval by a role to a human task, and actions to engine tasks.
+  When no provider is configured, or no valid process comes back, the bar says
+  why and nothing is generated. A candidate that still misses a branch or a
+  human step the request asked for opens with a warning naming what is
+  missing. You review the result before it applies.
 - **Decision tables** have a matrix editor (inputs, rows, hit policy,
   `otherwise`).
 - **Agent steps** pick their tools from the project's tool servers, with each

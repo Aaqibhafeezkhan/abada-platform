@@ -1,16 +1,21 @@
 import React, { useState } from 'react';
-import { Sparkles, ArrowRight, RotateCcw, Lightbulb } from 'lucide-react';
+import { Sparkles, ArrowRight, RotateCcw, Lightbulb, AlertCircle, X } from 'lucide-react';
 
 interface NLInputBarProps {
   onGenerateWorkflow: (prompt: string, mode: 'new' | 'refine') => Promise<void>;
   isGenerating: boolean;
   hasActiveWorkflow: boolean;
+  /** Why the last request produced no process; cleared when the next one starts. */
+  error?: string | null;
+  onDismissError?: () => void;
 }
 
 export const NLInputBar: React.FC<NLInputBarProps> = ({
   onGenerateWorkflow,
   isGenerating,
   hasActiveWorkflow,
+  error,
+  onDismissError,
 }) => {
   const [prompt, setPrompt] = useState<string>('');
   const [mode, setMode] = useState<'new' | 'refine'>('new');
@@ -36,6 +41,19 @@ export const NLInputBar: React.FC<NLInputBarProps> = ({
   return (
     <div className="absolute bottom-5 left-1/2 -translate-x-1/2 z-20 w-full max-w-3xl px-4 pointer-events-none">
       <div className="bg-[#25201D] border border-[#3A322E] rounded-2xl p-2.5 shadow-warm-lg pointer-events-auto space-y-2">
+        {error && (
+          <div role="alert" className="flex items-start gap-2 rounded-xl border border-[#E76F51]/40 bg-[#E76F51]/10 px-3 py-2 text-[11px] text-[#EAE3D9]">
+            <AlertCircle className="w-3.5 h-3.5 mt-0.5 shrink-0 text-[#E76F51]" />
+            <span className="min-w-0 whitespace-pre-line">{error}</span>
+            {onDismissError && (
+              <button type="button" onClick={onDismissError} aria-label="Dismiss"
+                className="ml-auto shrink-0 text-[#A89F91] hover:text-[#EAE3D9]">
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+        )}
+
         {/* Input Bar Form */}
         <form onSubmit={handleSubmit} className="flex items-center gap-2">
           <div className="pl-2 flex items-center justify-center text-[#9D4EDD]">
