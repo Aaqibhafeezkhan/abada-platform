@@ -1,0 +1,74 @@
+---
+title: Démarrage rapide
+description: Installez la plateforme de développement Abada sur une seule machine, connectez-vous à Studio et exécutez le processus de démarrage.
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+Une seule commande installe une plateforme locale complète : **PostgreSQL**, le **moteur Abada (Engine)**, **Studio**, l’**Agent Worker** et un **Keycloak de développement**, derrière une passerelle HTTP locale. Vous avez besoin de Docker avec Compose v2.
+
+## Installer
+
+```bash
+mkdir abada-quickstart && cd abada-quickstart
+curl -fsSL https://install.abadaplatform.com/install.sh | bash
+```
+
+L’installateur ne pose aucune question. Pour fournir une clé API Gemini dès l’installation, transmettez-la à `bash` via `ABADA_LLM_GEMINI_API_KEY` ; l’installateur vérifie alors qu’il peut appeler `gemini-3.6-flash` et enregistre la clé uniquement dans le fichier local `.env.dev`, non suivi par Git et protégé par les permissions `0600`. Sinon, ajoutez un fournisseur plus tard dans **Studio → Settings → AI Providers**, où les clés sont stockées de manière chiffrée.
+
+À la fin, l’installateur envoie un rapport anonyme unique (version, système et résultat ; le pays et la région sont déduits de la requête, et votre adresse n’est pas conservée). Pour désactiver cet envoi, exécutez `curl … | ABADA_USAGE_PING=0 bash` ou définissez `DO_NOT_TRACK=1`. Consultez [Confidentialité et rapport d’installation](/user/privacy/).
+
+Sous Windows (PowerShell) :
+
+```powershell
+New-Item -ItemType Directory abada-quickstart
+Set-Location abada-quickstart
+Invoke-WebRequest https://raw.githubusercontent.com/bashizip/abada-platform/main/release/quickstart.ps1 -OutFile quickstart.ps1
+.\quickstart.ps1
+```
+
+Les images sont publiées pour `linux/amd64` et `linux/arm64`.
+
+## Se connecter
+
+Une fois l’installation terminée, les URL et les comptes sont affichés :
+
+| Service | Adresse |
+| --- | --- |
+| Studio | `http://studio.localhost` (ou `http://localhost:5605`) |
+| Informations du moteur | `http://api.localhost/api/v1/info` |
+| Keycloak (développement uniquement) | `http://keycloak.localhost` |
+
+Connectez-vous à Studio avec **alice** / `alice`. Un deuxième compte, **bob** / `bob`, permet de tester le rôle de réviseur. Ces identifiants sont réservés au développement local : ne les réutilisez jamais ailleurs.
+
+L’en-tête de Studio propose quatre vues — **Canvas**, **Task Inbox**, **Operations** et **Insight** — ainsi que **Admin** pour les membres de `abada-admin`.
+
+## Exécuter le processus de démarrage
+
+Lors de la première connexion, Studio crée le projet **Abada Starter** et déploie le processus **AI Lead Triage**. Ouvrez **Deploy & Start** : vous pourrez choisir des données d’exemple HIGH, MEDIUM ou LOW.
+
+- Un prospect de niveau HIGH crée une tâche de revue pour **bob** : connectez-vous en tant que bob, ouvrez **Task Inbox**, prenez en charge la tâche et remplissez le formulaire.
+- Le bouton **four LOW samples** envoie les quatre exemples LOW vers l’[Insight Engine](/user/studio-insight/), qui propose ensuite une amélioration à faire examiner par une personne. Les appels au modèle sont exécutés l’un après l’autre, avec un délai respectueux des quotas ; prévoyez environ cinq minutes.
+
+## Vérifier et arrêter
+
+```bash
+curl -fsS http://api.localhost/api/actuator/health/readiness
+cd abada-platform
+./release/abada-platform status dev
+./release/abada-platform down dev
+```
+
+## Étapes suivantes
+
+<Steps>
+
+1. Créez votre propre processus pas à pas en suivant le [tutoriel](/user/first-workflow/).
+2. Découvrez le langage dans [Créer des processus en APL](/user/authoring/).
+3. Choisissez un déploiement pour une équipe ou un serveur dans [Choisir un déploiement](/user/).
+
+</Steps>
+
+<Aside type="note">
+  La page [Déploiement de développement](/user/development/) présente la même pile lorsque vous l’exécutez à partir d’un clone du dépôt.
+</Aside>
